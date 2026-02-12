@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node:*)",
+      "Bash(npm --version:*)",
+      "Bash(psql:*)",
+      "Bash(pnpm:*)",
+      "Bash(npx:*)",
+      "WebFetch(domain:wxt.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm build:*)"
+    ]
+  }
+}

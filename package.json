@@ -1,0 +1,9 @@
+{
+  "name": "tabflow",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter extension dev",
+    "build": "pnpm --filter extension build",
+    "zip": "pnpm --filter extension zip"
+  }
+}
