@@ -17,6 +17,7 @@ function domainColor(domain: string): string {
 
 export function App() {
   const [tabs, setTabs] = useState<TabInfo[]>([]);
+  const [allTabs, setAllTabs] = useState<TabInfo[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [view, setView] = useState<'tabs' | 'workspaces'>('tabs');
   const [saving, setSaving] = useState(false);
@@ -25,11 +26,20 @@ export function App() {
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'get-tabs' }).then((response) => {
       if (response?.tabs) {
+        setAllTabs(response.tabs);
         setTabs(response.tabs.slice(0, 7));
       }
     });
     getWorkspaces().then(setWorkspaces);
   }, []);
+
+  const totalTabs = allTabs.length;
+  const suspendedTabs = allTabs.filter((t) => t.isDiscarded).length;
+  const pinnedTabs = allTabs.filter((t) => t.isPinned).length;
+  const windowIds = new Set(allTabs.map((t) => t.windowId));
+  const windowCount = windowIds.size;
+  // Rough estimate: ~50MB per active tab, ~5MB per suspended tab
+  const memorySaved = suspendedTabs * 45; // MB saved by suspending
 
   const switchToTab = (tabId: number) => {
     chrome.runtime.sendMessage({ type: 'switch-tab', payload: { tabId } });
@@ -96,6 +106,21 @@ export function App() {
 
       {view === 'tabs' ? (
         <>
+          {/* Stats bar */}
+          <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-3">
+            <Stat value={totalTabs} label="tabs" color="text-cyan-400" />
+            <Stat value={windowCount} label={windowCount === 1 ? 'window' : 'windows'} color="text-blue-400" />
+            {pinnedTabs > 0 && <Stat value={pinnedTabs} label="pinned" color="text-white/50" />}
+            {suspendedTabs > 0 && (
+              <Stat value={suspendedTabs} label="suspended" color="text-green-400" />
+            )}
+            {memorySaved > 0 && (
+              <span className="ml-auto text-[10px] text-green-400/60">
+                ~{memorySaved >= 1000 ? `${(memorySaved / 1000).toFixed(1)}GB` : `${memorySaved}MB`} saved
+              </span>
+            )}
+          </div>
+
           {/* Tab list */}
           <div className="py-1">
             {tabs.length === 0 ? (
@@ -231,5 +256,14 @@ export function App() {
         </>
       )}
     </div>
+  );
+}
+
+function Stat({ value, label, color }: { value: number; label: string; color: string }) {
+  return (
+    <span className="flex items-center gap-1 text-[11px]">
+      <span className={`font-semibold ${color}`}>{value}</span>
+      <span className="text-white/30">{label}</span>
+    </span>
   );
 }

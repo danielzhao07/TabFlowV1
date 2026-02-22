@@ -9,6 +9,10 @@ import { TabList } from './TabList';
 import { StatusBar } from './StatusBar';
 import { RecentlyClosedSection } from './RecentlyClosedSection';
 import { GroupSuggestions } from './GroupSuggestions';
+import { CheatSheet } from './CheatSheet';
+import { UndoToast } from './UndoToast';
+import { CommandPalette, useCommands } from './CommandPalette';
+import { SnoozedSection } from './SnoozedSection';
 
 export function HudOverlay() {
   const [visible, setVisible] = useState(false);
@@ -24,7 +28,12 @@ export function HudOverlay() {
   const [sortMode, setSortMode] = useState<'mru' | 'domain' | 'title' | 'frecency'>('mru');
   const [frecencyScores, setFrecencyScores] = useState<Map<string, number>>(new Map());
   const [bookmarkedUrls, setBookmarkedUrls] = useState<Set<string>>(new Set());
+  const [notesMap, setNotesMap] = useState<Map<string, string>>(new Map());
+  const [showCheatSheet, setShowCheatSheet] = useState(false);
+  const [undoToast, setUndoToast] = useState<{ message: string; tabTitle: string } | null>(null);
+  const [otherWindows, setOtherWindows] = useState<{ windowId: number; tabCount: number; title: string }[]>([]);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const lastToggleRef = useRef<number>(0);
 
   const windowFilteredTabs = windowFilter === 'current' && currentWindowId
     ? tabs.filter((t) => t.windowId === currentWindowId)
@@ -50,15 +59,7 @@ export function HudOverlay() {
     return list;
   }, [windowFilteredTabs, sortMode, frecencyScores]);
 
-  const filteredTabs = query
-    ? searchTabs(sortedTabs, query, settings?.searchThreshold)
-    : sortedTabs;
-
-  const displayTabs = settings?.maxResults
-    ? filteredTabs.slice(0, settings.maxResults)
-    : filteredTabs;
-
-  // Duplicate detection: map URL -> array of tabIds
+  // Duplicate detection: map URL -> array of tabIds (moved above filteredTabs for search filter)
   const duplicateMap = new Map<string, number[]>();
   for (const tab of tabs) {
     if (!tab.url || tab.url === 'chrome://newtab/') continue;
@@ -75,6 +76,14 @@ export function HudOverlay() {
     }
   }
 
+  const filteredTabs = query && !query.startsWith('>')
+    ? searchTabs(sortedTabs, query, settings?.searchThreshold, notesMap.size > 0 ? notesMap : undefined, duplicateUrls)
+    : sortedTabs;
+
+  const displayTabs = settings?.maxResults
+    ? filteredTabs.slice(0, settings.maxResults)
+    : filteredTabs;
+
   const fetchTabs = useCallback(async () => {
     const response = await chrome.runtime.sendMessage({ type: 'get-tabs' });
     if (response?.tabs) {
@@ -87,6 +96,7 @@ export function HudOverlay() {
 
   const hide = useCallback(() => {
     setAnimatingIn(false);
+    setShowCheatSheet(false);
     setTimeout(() => {
       setVisible(false);
       setQuery('');
@@ -104,13 +114,18 @@ export function HudOverlay() {
   );
 
   const closeTab = useCallback((tabId: number) => {
+    const closedTab = tabs.find((t) => t.tabId === tabId);
     chrome.runtime.sendMessage({ type: 'close-tab', payload: { tabId } });
     setTabs((prev) => {
       const newTabs = prev.filter((t) => t.tabId !== tabId);
       setSelectedIndex((idx) => Math.min(idx, Math.max(0, newTabs.length - 1)));
       return newTabs;
     });
-  }, []);
+    if (closedTab) {
+      const title = closedTab.title.length > 30 ? closedTab.title.slice(0, 30) + '...' : closedTab.title;
+      setUndoToast({ message: `Closed "${title}"`, tabTitle: closedTab.title });
+    }
+  }, [tabs]);
 
   const togglePin = useCallback((tabId: number, pinned: boolean) => {
     chrome.runtime.sendMessage({ type: 'pin-tab', payload: { tabId, pinned } });
@@ -222,6 +237,70 @@ export function HudOverlay() {
     }
   }, [tabs, bookmarkedUrls]);
 
+  const saveNote = useCallback(async (_tabId: number, url: string, note: string) => {
+    await chrome.runtime.sendMessage({ type: 'save-note', payload: { url, note } });
+    setNotesMap((prev) => {
+      const next = new Map(prev);
+      if (note.trim()) next.set(url, note.trim());
+      else next.delete(url);
+      return next;
+    });
+  }, []);
+
+  const snoozeTab = useCallback(async (tabId: number, durationMs: number) => {
+    const tab = tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    await chrome.runtime.sendMessage({
+      type: 'snooze-tab',
+      payload: { tabId, url: tab.url, title: tab.title, faviconUrl: tab.faviconUrl, durationMs },
+    });
+    setTabs((prev) => {
+      const newTabs = prev.filter((t) => t.tabId !== tabId);
+      setSelectedIndex((idx) => Math.min(idx, Math.max(0, newTabs.length - 1)));
+      return newTabs;
+    });
+    const title = tab.title.length > 30 ? tab.title.slice(0, 30) + '...' : tab.title;
+    setUndoToast({ message: `Snoozed "${title}"`, tabTitle: tab.title });
+  }, [tabs]);
+
+  const moveToWindow = useCallback(async (tabId: number, windowId: number) => {
+    await chrome.runtime.sendMessage({ type: 'move-to-window', payload: { tabId, windowId } });
+    fetchTabs();
+    // Refresh window list
+    chrome.runtime.sendMessage({ type: 'get-windows' }).then((response) => {
+      if (response?.windows) {
+        setOtherWindows(response.windows.filter((w: any) => w.windowId !== currentWindowId));
+      }
+    });
+  }, [fetchTabs, currentWindowId]);
+
+  const reorderTabs = useCallback(async (fromIndex: number, toIndex: number) => {
+    const tab = displayTabs[fromIndex];
+    if (!tab) return;
+    // Calculate the target position based on the toIndex tab
+    const targetTab = displayTabs[toIndex];
+    if (!targetTab) return;
+    try {
+      // Move tab in Chrome to be adjacent to the target
+      await chrome.tabs.move(tab.tabId, { index: toIndex > fromIndex ? toIndex : toIndex });
+      fetchTabs();
+    } catch {
+      // Tab may have been closed
+    }
+  }, [displayTabs, fetchTabs]);
+
+  const toggleMute = useCallback(async (tabId: number) => {
+    const tab = tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId, muted: !tab.isAudible } });
+    fetchTabs();
+  }, [tabs, fetchTabs]);
+
+  const closeByDomain = useCallback(async (tabId: number, domain: string) => {
+    await chrome.runtime.sendMessage({ type: 'close-by-domain', payload: { domain, excludeTabId: tabId } });
+    fetchTabs();
+  }, [fetchTabs]);
+
   const groupSuggestionTabs = useCallback(async (tabIds: number[], domain: string) => {
     const title = domain.split('.')[0] || domain;
     await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title } });
@@ -249,10 +328,47 @@ export function HudOverlay() {
     }
   }, [fetchTabs, fetchRecentTabs]);
 
+  const isCommandMode = query.startsWith('>');
+  const commandQuery = isCommandMode ? query.slice(1).trim() : '';
+
+  const commands = useCommands({
+    closeDuplicates,
+    closeSelectedTabs,
+    groupSelectedTabs,
+    ungroupSelectedTabs,
+    reopenLastClosed,
+    toggleWindowFilter: () => setWindowFilter((prev) => prev === 'all' ? 'current' : 'all'),
+    cycleSortMode: () => setSortMode((prev) => {
+      if (prev === 'mru') return 'frecency';
+      if (prev === 'frecency') return 'domain';
+      if (prev === 'domain') return 'title';
+      return 'mru';
+    }),
+    selectAll: () => {
+      const allIds = new Set(displayTabs.map((t) => t.tabId));
+      setSelectedTabs((prev) => {
+        if (displayTabs.every((t) => prev.has(t.tabId))) return new Set();
+        return allIds;
+      });
+    },
+    openSettings: () => { chrome.runtime.openOptionsPage(); hide(); },
+    openCheatSheet: () => setShowCheatSheet(true),
+  });
+
   // Listen for toggle messages from background
   useEffect(() => {
     const listener = (message: any) => {
       if (message.type === 'toggle-hud') {
+        const now = Date.now();
+        const timeSinceLastToggle = now - lastToggleRef.current;
+        lastToggleRef.current = now;
+
+        // Double-tap Alt+Q (within 400ms): quick-switch to previous tab
+        if (timeSinceLastToggle < 400) {
+          chrome.runtime.sendMessage({ type: 'quick-switch' });
+          return;
+        }
+
         setVisible((prev) => {
           if (!prev) {
             fetchTabs();
@@ -268,6 +384,17 @@ export function HudOverlay() {
             chrome.runtime.sendMessage({ type: 'get-bookmarks' }).then((response) => {
               if (response?.bookmarks) {
                 setBookmarkedUrls(new Set(response.bookmarks.map((b: TabBookmark) => b.url)));
+              }
+            });
+            chrome.runtime.sendMessage({ type: 'get-notes' }).then((response) => {
+              if (response?.notes) {
+                setNotesMap(new Map(Object.entries(response.notes)));
+              }
+            });
+            chrome.runtime.sendMessage({ type: 'get-windows' }).then((response) => {
+              if (response?.windows) {
+                const senderWindowId = response.windows.find?.((w: any) => w.windowId);
+                setOtherWindows(response.windows);
               }
             });
             return true;
@@ -354,6 +481,15 @@ export function HudOverlay() {
         return;
       }
 
+      // Ctrl+M: mute/unmute current tab
+      if (e.key === 'm' && e.ctrlKey && !e.shiftKey) {
+        e.preventDefault();
+        if (displayTabs[selectedIndex]) {
+          toggleMute(displayTabs[selectedIndex].tabId);
+        }
+        return;
+      }
+
       // Ctrl+S: cycle sort mode
       if (e.key === 's' && e.ctrlKey && !e.shiftKey) {
         e.preventDefault();
@@ -380,8 +516,15 @@ export function HudOverlay() {
         return;
       }
 
-      // Number keys 1-9: quick-switch (only when not typing in search)
+      // ?: toggle cheat sheet (only when not typing in search)
       const isTyping = (e.target as HTMLElement)?.tagName === 'INPUT';
+      if (!isTyping && e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        setShowCheatSheet((prev) => !prev);
+        return;
+      }
+
+      // Number keys 1-9: quick-switch (only when not typing in search)
       if (!isTyping && !e.ctrlKey && !e.altKey && !e.metaKey && e.key >= '1' && e.key <= '9') {
         const index = parseInt(e.key) - 1;
         if (displayTabs[index]) {
@@ -423,7 +566,7 @@ export function HudOverlay() {
 
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [visible, displayTabs, selectedIndex, switchToTab, closeTab, reopenLastClosed, hide, selectedTabs, closeSelectedTabs, groupSelectedTabs, ungroupSelectedTabs, toggleBookmark]);
+  }, [visible, displayTabs, selectedIndex, switchToTab, closeTab, reopenLastClosed, hide, selectedTabs, closeSelectedTabs, groupSelectedTabs, ungroupSelectedTabs, toggleBookmark, toggleMute]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -466,26 +609,46 @@ export function HudOverlay() {
           onSortModeChange={setSortMode}
         />
 
-        <TabList
-          tabs={displayTabs}
-          selectedIndex={selectedIndex}
-          query={query}
-          onSelect={switchToTab}
-          onClose={closeTab}
-          onTogglePin={togglePin}
-          onToggleSelect={toggleSelect}
-          onToggleBookmark={toggleBookmark}
-          onHover={setSelectedIndex}
-          showUrls={settings?.showUrls ?? true}
-          selectedTabs={selectedTabs}
-          duplicateUrls={duplicateUrls}
-          bookmarkedUrls={bookmarkedUrls}
-          sortMode={sortMode}
-        />
+        {isCommandMode ? (
+          <CommandPalette
+            query={commandQuery}
+            commands={commands}
+            onClose={() => setQuery('')}
+          />
+        ) : (
+          <>
+            <TabList
+              tabs={displayTabs}
+              selectedIndex={selectedIndex}
+              query={query}
+              onSelect={switchToTab}
+              onClose={closeTab}
+              onTogglePin={togglePin}
+              onToggleSelect={toggleSelect}
+              onToggleBookmark={toggleBookmark}
+              onSaveNote={saveNote}
+              onSnooze={snoozeTab}
+              onMoveToWindow={moveToWindow}
+              onReorderTabs={reorderTabs}
+              onToggleMute={toggleMute}
+              onCloseByDomain={closeByDomain}
+              otherWindows={otherWindows.filter((w) => w.windowId !== currentWindowId)}
+              onHover={setSelectedIndex}
+              showUrls={settings?.showUrls ?? true}
+              selectedTabs={selectedTabs}
+              duplicateUrls={duplicateUrls}
+              bookmarkedUrls={bookmarkedUrls}
+              notesMap={notesMap}
+              sortMode={sortMode}
+            />
 
-        <GroupSuggestions tabs={tabs} onGroup={groupSuggestionTabs} />
+            <GroupSuggestions tabs={tabs} onGroup={groupSuggestionTabs} />
 
-        <RecentlyClosedSection recentTabs={recentTabs} onRestore={restoreSession} />
+            <SnoozedSection onWake={fetchTabs} />
+
+            <RecentlyClosedSection recentTabs={recentTabs} onRestore={restoreSession} />
+          </>
+        )}
 
         <StatusBar
           count={displayTabs.length}
@@ -497,6 +660,21 @@ export function HudOverlay() {
           onCloseDuplicates={closeDuplicates}
         />
       </div>
+
+      {showCheatSheet && (
+        <CheatSheet onClose={() => setShowCheatSheet(false)} />
+      )}
+
+      {undoToast && (
+        <UndoToast
+          message={undoToast.message}
+          onUndo={() => {
+            reopenLastClosed();
+            setUndoToast(null);
+          }}
+          onDismiss={() => setUndoToast(null)}
+        />
+      )}
     </div>
   );
 }

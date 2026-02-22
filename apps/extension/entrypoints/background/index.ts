@@ -3,6 +3,8 @@ import { getSettings } from '@/lib/settings';
 import { getMRUList } from '@/lib/storage';
 import { recordVisit } from '@/lib/frecency';
 import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
+import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
+import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
 
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
@@ -146,6 +148,25 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'get-notes') {
+      getNotesMap().then((notesMap) => {
+        sendResponse({ notes: Object.fromEntries(notesMap) });
+      });
+      return true;
+    }
+
+    if (message.type === 'save-note') {
+      const { url, note } = message.payload;
+      saveNote(url, note).then(() => sendResponse({ success: true }));
+      return true;
+    }
+
+    if (message.type === 'delete-note') {
+      const { url } = message.payload;
+      deleteNote(url).then(() => sendResponse({ success: true }));
+      return true;
+    }
+
     if (message.type === 'get-recent') {
       chrome.sessions.getRecentlyClosed({ maxResults: 10 }).then((sessions) => {
         const recentTabs = sessions
@@ -187,7 +208,112 @@ export default defineBackground(() => {
           sendResponse({ success: false });
         }
       });
-      return true; // async response
+      return true;
+    }
+
+    // Tab snooze
+    if (message.type === 'snooze-tab') {
+      const { tabId, url, title, faviconUrl, durationMs } = message.payload;
+      const now = Date.now();
+      snoozeTab({ url, title, faviconUrl, snoozedAt: now, wakeAt: now + durationMs }).then((tabs) => {
+        chrome.tabs.remove(tabId).catch(() => {});
+        sendResponse({ success: true, snoozedTabs: tabs });
+      });
+      return true;
+    }
+
+    if (message.type === 'get-snoozed') {
+      getSnoozedTabs().then((tabs) => sendResponse({ snoozedTabs: tabs }));
+      return true;
+    }
+
+    if (message.type === 'cancel-snooze') {
+      const { url, wakeAt } = message.payload;
+      removeSnoozedTab(url, wakeAt).then((tabs) => sendResponse({ snoozedTabs: tabs }));
+      return true;
+    }
+
+    // Move tab to window
+    if (message.type === 'move-to-window') {
+      const { tabId, windowId } = message.payload;
+      (async () => {
+        try {
+          if (windowId === -1) {
+            // Move to new window
+            await chrome.windows.create({ tabId });
+          } else {
+            await chrome.tabs.move(tabId, { windowId, index: -1 });
+            await chrome.tabs.update(tabId, { active: true });
+            await chrome.windows.update(windowId, { focused: true });
+          }
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
+    if (message.type === 'get-windows') {
+      chrome.windows.getAll({ windowTypes: ['normal'] }).then(async (windows) => {
+        const result = await Promise.all(
+          windows.map(async (w) => {
+            const tabs = await chrome.tabs.query({ windowId: w.id });
+            const activeTab = tabs.find((t) => t.active);
+            return {
+              windowId: w.id!,
+              tabCount: tabs.length,
+              title: activeTab?.title || `Window ${w.id}`,
+            };
+          })
+        );
+        sendResponse({ windows: result });
+      });
+      return true;
+    }
+
+    // Mute/unmute tab
+    if (message.type === 'mute-tab') {
+      const { tabId, muted } = message.payload;
+      chrome.tabs.update(tabId, { muted }).then(() => {
+        broadcastUpdate();
+        sendResponse({ success: true });
+      }).catch(() => sendResponse({ success: false }));
+      return true;
+    }
+
+    // Close tabs by domain
+    if (message.type === 'close-by-domain') {
+      const { domain, excludeTabId } = message.payload;
+      (async () => {
+        const allTabs = await chrome.tabs.query({});
+        const toClose = allTabs.filter((t) => {
+          if (t.id === excludeTabId) return false;
+          try {
+            return new URL(t.url || '').hostname.replace('www.', '') === domain;
+          } catch { return false; }
+        });
+        for (const t of toClose) {
+          if (t.id) chrome.tabs.remove(t.id).catch(() => {});
+        }
+        sendResponse({ success: true, count: toClose.length });
+      })();
+      return true;
+    }
+
+    // Quick-switch: toggle between last two tabs
+    if (message.type === 'quick-switch') {
+      getMRUList().then((tabs) => {
+        // Find the second tab in MRU (index 1 = previous tab)
+        const prev = tabs[1];
+        if (prev) {
+          chrome.tabs.update(prev.tabId, { active: true });
+          chrome.windows.update(prev.windowId, { focused: true });
+        }
+        sendResponse({ success: !!prev });
+      });
+      return true;
     }
   });
 
@@ -196,9 +322,16 @@ export default defineBackground(() => {
   chrome.tabs.onCreated.addListener(updateBadge);
   chrome.tabs.onRemoved.addListener(updateBadge);
 
+  // Snooze waker - check every minute for tabs to wake
+  chrome.alarms.create('snooze-waker', { periodInMinutes: 1 });
+
   // Tab suspender - check every 5 minutes
   chrome.alarms.create('tab-suspender', { periodInMinutes: 5 });
   chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === 'snooze-waker') {
+      await wakeExpiredTabs();
+      return;
+    }
     if (alarm.name !== 'tab-suspender') return;
     const settings = await getSettings();
     if (!settings.autoSuspend) return;

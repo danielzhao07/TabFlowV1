@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import type { TabInfo } from '@/lib/types';
 import { TabCard } from './TabCard';
 
@@ -11,11 +11,19 @@ interface TabListProps {
   onTogglePin: (tabId: number, pinned: boolean) => void;
   onToggleSelect: (tabId: number, shiftKey: boolean) => void;
   onToggleBookmark: (tabId: number) => void;
+  onSaveNote: (tabId: number, url: string, note: string) => void;
+  onSnooze: (tabId: number, durationMs: number) => void;
+  onMoveToWindow: (tabId: number, windowId: number) => void;
+  onReorderTabs: (fromIndex: number, toIndex: number) => void;
+  onToggleMute: (tabId: number) => void;
+  onCloseByDomain: (tabId: number, domain: string) => void;
+  otherWindows: { windowId: number; tabCount: number; title: string }[];
   onHover: (index: number) => void;
   showUrls?: boolean;
   selectedTabs: Set<number>;
   duplicateUrls: Set<string>;
   bookmarkedUrls: Set<string>;
+  notesMap: Map<string, string>;
   sortMode: 'mru' | 'domain' | 'title' | 'frecency';
 }
 
@@ -27,9 +35,27 @@ function getDomain(url: string): string {
   }
 }
 
-export function TabList({ tabs, selectedIndex, query, onSelect, onClose, onTogglePin, onToggleSelect, onToggleBookmark, onHover, showUrls = true, selectedTabs, duplicateUrls, bookmarkedUrls, sortMode }: TabListProps) {
+export function TabList({ tabs, selectedIndex, query, onSelect, onClose, onTogglePin, onToggleSelect, onToggleBookmark, onSaveNote, onSnooze, onMoveToWindow, onReorderTabs, onToggleMute, onCloseByDomain, otherWindows, onHover, showUrls = true, selectedTabs, duplicateUrls, bookmarkedUrls, notesMap, sortMode }: TabListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLDivElement>(null);
+  const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((index: number) => {
+    setDragFromIndex(index);
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
+      onReorderTabs(dragFromIndex, dragOverIndex);
+    }
+    setDragFromIndex(null);
+    setDragOverIndex(null);
+  }, [dragFromIndex, dragOverIndex, onReorderTabs]);
 
   useEffect(() => {
     selectedRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -56,6 +82,8 @@ export function TabList({ tabs, selectedIndex, query, onSelect, onClose, onToggl
         const showDomainHeader = sortMode === 'domain' && !query && domain !== lastDomain;
         if (showDomainHeader) lastDomain = domain;
 
+        const isDragTarget = dragOverIndex === index && dragFromIndex !== null && dragFromIndex !== index;
+
         return (
           <div key={tab.tabId}>
             {showDomainHeader && (
@@ -69,6 +97,11 @@ export function TabList({ tabs, selectedIndex, query, onSelect, onClose, onToggl
             <div
               ref={index === selectedIndex ? selectedRef : undefined}
               onMouseEnter={() => onHover(index)}
+              style={{
+                borderTop: isDragTarget && dragFromIndex! > index ? '2px solid rgba(34,211,238,0.5)' : undefined,
+                borderBottom: isDragTarget && dragFromIndex! < index ? '2px solid rgba(34,211,238,0.5)' : undefined,
+                opacity: dragFromIndex === index ? 0.4 : 1,
+              }}
             >
               <TabCard
                 tab={tab}
@@ -78,11 +111,22 @@ export function TabList({ tabs, selectedIndex, query, onSelect, onClose, onToggl
                 isBookmarked={bookmarkedUrls.has(tab.url)}
                 mruPosition={index + 1}
                 query={query}
+                note={notesMap.get(tab.url)}
                 onClick={() => onSelect(tab.tabId)}
                 onClose={onClose}
                 onTogglePin={onTogglePin}
                 onToggleSelect={onToggleSelect}
                 onToggleBookmark={onToggleBookmark}
+                onSaveNote={onSaveNote}
+                onSnooze={onSnooze}
+                onMoveToWindow={onMoveToWindow}
+                onToggleMute={onToggleMute}
+                onCloseByDomain={onCloseByDomain}
+                otherWindows={otherWindows}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+                index={index}
                 showUrl={showUrls}
               />
             </div>

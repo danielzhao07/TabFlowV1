@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getSettings, saveSettings, type TabFlowSettings } from '@/lib/settings';
 import { getWorkspaces, deleteWorkspace, type Workspace } from '@/lib/workspaces';
+import { exportData, importData, downloadJson, type TabFlowExport } from '@/lib/export-import';
 
 export function App() {
   const [settings, setSettings] = useState<TabFlowSettings | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [saved, setSaved] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -197,6 +200,65 @@ export function App() {
               ))}
             </div>
           )}
+        </Section>
+
+        {/* Export / Import */}
+        <Section title="Data">
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-white/80 mb-1">Export</p>
+              <p className="text-xs text-white/40 mb-3">Download all your settings, workspaces, bookmarks, and notes as a JSON file.</p>
+              <button
+                onClick={async () => {
+                  const data = await exportData();
+                  downloadJson(data, `tabflow-backup-${new Date().toISOString().slice(0, 10)}.json`);
+                }}
+                className="px-4 py-2 rounded-lg bg-cyan-400/15 border border-cyan-400/25 text-cyan-300 text-xs font-medium hover:bg-cyan-400/25 transition-colors"
+              >
+                Export data
+              </button>
+            </div>
+            <div className="pt-4 border-t border-white/[0.06]">
+              <p className="text-sm text-white/80 mb-1">Import</p>
+              <p className="text-xs text-white/40 mb-3">Restore from a previously exported JSON file. This will overwrite your current data.</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const data = JSON.parse(text) as TabFlowExport;
+                    if (data.version !== 1) {
+                      setImportStatus('Unsupported file format');
+                      return;
+                    }
+                    const result = await importData(data);
+                    setImportStatus(`Imported: ${result.imported.join(', ')}`);
+                    // Refresh UI
+                    getSettings().then(setSettings);
+                    getWorkspaces().then(setWorkspaces);
+                  } catch {
+                    setImportStatus('Failed to import: invalid file');
+                  }
+                  setTimeout(() => setImportStatus(null), 4000);
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-2 rounded-lg bg-white/[0.06] border border-white/[0.12] text-white/60 text-xs font-medium hover:bg-white/[0.1] transition-colors"
+              >
+                Import data
+              </button>
+              {importStatus && (
+                <p className="mt-2 text-xs text-cyan-300/70">{importStatus}</p>
+              )}
+            </div>
+          </div>
         </Section>
 
         {/* Save indicator */}
