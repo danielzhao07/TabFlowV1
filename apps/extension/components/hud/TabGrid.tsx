@@ -10,7 +10,6 @@ interface TabGridProps {
   bookmarkedUrls: Set<string>;
   duplicateUrls: Set<string>;
   notesMap: Map<string, string>;
-  otherWindows: { windowId: number; tabCount: number; title: string }[];
   actions: TabActions;
   cols: number;
   thumbnails?: Map<number, string>;
@@ -18,7 +17,7 @@ interface TabGridProps {
 
 export function TabGrid({
   tabs, selectedIndex, selectedTabs, bookmarkedUrls, duplicateUrls,
-  notesMap, otherWindows, actions, cols, thumbnails,
+  notesMap, actions, cols, thumbnails,
 }: TabGridProps) {
   const dragFromRef = useRef<number | null>(null);
 
@@ -67,11 +66,9 @@ export function TabGrid({
             onClose={actions.closeTab}
             onTogglePin={actions.togglePin}
             onToggleSelect={actions.toggleSelect}
-            onToggleBookmark={actions.toggleBookmark}
-            onSnooze={actions.snoozeTab}
-            onMoveToWindow={actions.moveToWindow}
-            onToggleMute={actions.toggleMute}
-            otherWindows={otherWindows}
+            onDuplicate={actions.duplicateTab}
+            onMoveToNewWindow={actions.moveToNewWindow}
+            onReload={actions.reloadTab}
             animDelay={Math.min(index * 15, 150)}
           />
         </div>

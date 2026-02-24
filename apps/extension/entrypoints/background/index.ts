@@ -196,16 +196,26 @@ export default defineBackground(() => {
 
     if (message.type === 'switch-tab') {
       const { tabId } = message.payload;
-      chrome.tabs.update(tabId, { active: true });
+      chrome.tabs.update(tabId, { active: true }).catch(() => {});
       chrome.tabs.get(tabId).then((tab) => {
-        chrome.windows.update(tab.windowId, { focused: true });
-      });
+        chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
+      }).catch(() => {});
     }
 
     if (message.type === 'close-tab') {
       const { tabId } = message.payload;
-      chrome.tabs.remove(tabId);
+      chrome.tabs.remove(tabId).catch(() => {});
       // onRemoved listener handles MRU cleanup and broadcast
+    }
+
+    if (message.type === 'duplicate-tab') {
+      const { tabId } = message.payload;
+      chrome.tabs.duplicate(tabId).catch(() => {});
+    }
+
+    if (message.type === 'reload-tab') {
+      const { tabId } = message.payload;
+      chrome.tabs.reload(tabId).catch(() => {});
     }
 
     if (message.type === 'pin-tab') {
@@ -458,8 +468,8 @@ export default defineBackground(() => {
         // Find the second tab in MRU (index 1 = previous tab)
         const prev = tabs[1];
         if (prev) {
-          chrome.tabs.update(prev.tabId, { active: true });
-          chrome.windows.update(prev.windowId, { focused: true });
+          chrome.tabs.update(prev.tabId, { active: true }).catch(() => {});
+          chrome.windows.update(prev.windowId, { focused: true }).catch(() => {});
         }
         sendResponse({ success: !!prev });
       });

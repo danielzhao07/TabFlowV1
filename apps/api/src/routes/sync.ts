@@ -40,6 +40,20 @@ syncRouter.post('/workspaces', async (req: Request, res: Response) => {
     res.status(201).json({ workspace });
 });
 
+syncRouter.patch('/workspaces/:id', async (req: Request, res: Response) => {
+    const userId = req.headers['x-user-id'] as string;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const id = req.params.id as string;
+    const parsed = createWorkspaceSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const [workspace] = await db.update(workspaces)
+        .set({ ...parsed.data, updatedAt: new Date() })
+        .where(and(eq(workspaces.id, id), eq(workspaces.userId, userId)))
+        .returning();
+    if (!workspace) return res.status(404).json({ error: 'Workspace not found' });
+    res.json({ workspace });
+});
+
 syncRouter.delete('/workspaces/:id', async (req: Request, res: Response) => {
     const userId = req.headers['x-user-id'] as string;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

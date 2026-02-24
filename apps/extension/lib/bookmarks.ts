@@ -1,3 +1,5 @@
+import { syncBookmarkToCloud } from './api-client';
+
 const BOOKMARKS_KEY = 'tabflow_bookmarks';
 
 export interface TabBookmark {
@@ -19,6 +21,7 @@ export async function addBookmark(bookmark: Omit<TabBookmark, 'createdAt'>): Pro
   const newBookmark: TabBookmark = { ...bookmark, createdAt: Date.now() };
   const updated = [newBookmark, ...bookmarks];
   await chrome.storage.local.set({ [BOOKMARKS_KEY]: updated });
+  syncBookmarkToCloud(bookmark.url, bookmark.title, bookmark.faviconUrl).catch(() => {});
   return updated;
 }
 

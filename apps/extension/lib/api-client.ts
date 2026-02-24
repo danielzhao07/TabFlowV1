@@ -109,3 +109,35 @@ export async function saveWorkspace(name: string, tabs: Workspace['tabs']): Prom
 export async function deleteWorkspace(id: string): Promise<void> {
   await request(`/api/sync/workspaces/${id}`, { method: 'DELETE' });
 }
+
+export async function updateWorkspace(id: string, tabs: Workspace['tabs']): Promise<Workspace> {
+  const data = await request<{ workspace: Workspace }>(`/api/sync/workspaces/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tabs }),
+  });
+  return data.workspace;
+}
+
+// ---- Sync: bookmarks (fire-and-forget to cloud) ----
+export async function syncBookmarkToCloud(url: string, title: string, faviconUrl?: string): Promise<void> {
+  await request('/api/sync/bookmarks', {
+    method: 'POST',
+    body: JSON.stringify({ url, title, faviconUrl: faviconUrl || '' }),
+  });
+}
+
+// ---- Sync: notes (fire-and-forget to cloud) ----
+export async function syncNoteToCloud(url: string, content: string): Promise<void> {
+  await request('/api/sync/notes', {
+    method: 'POST',
+    body: JSON.stringify({ url, content }),
+  });
+}
+
+// ---- Sync: settings (fire-and-forget to cloud) ----
+export async function syncSettingsToCloud(settings: Record<string, unknown>): Promise<void> {
+  await request('/api/sync/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}

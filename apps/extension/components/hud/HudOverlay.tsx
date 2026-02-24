@@ -10,6 +10,7 @@ import { AnalyticsBar } from './AnalyticsBar';
 import { CheatSheet } from './CheatSheet';
 import { UndoToast } from './UndoToast';
 import { CommandPalette, useCommands } from './CommandPalette';
+import { GroupSuggestions } from './GroupSuggestions';
 import { searchHistory, checkHealth, type HistoryResult } from '@/lib/api-client';
 import { getStoredTokens, type TokenSet } from '@/lib/auth';
 
@@ -18,6 +19,7 @@ export function HudOverlay() {
   const a = useTabActions(s);
   const [historyResults, setHistoryResults] = useState<HistoryResult[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [authUser, setAuthUser] = useState<TokenSet | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -31,15 +33,18 @@ export function HudOverlay() {
   useEffect(() => {
     if (!isAiMode || !aiQuery) {
       setHistoryResults([]);
+      setAiError(false);
       return;
     }
     setAiLoading(true);
+    setAiError(false);
     const timer = setTimeout(async () => {
       try {
         const results = await searchHistory(aiQuery, 15);
         setHistoryResults(results);
       } catch {
         setHistoryResults([]);
+        setAiError(true);
       } finally {
         setAiLoading(false);
       }
@@ -238,7 +243,6 @@ export function HudOverlay() {
                   bookmarkedUrls={s.bookmarkedUrls}
                   duplicateUrls={s.duplicateUrls}
                   notesMap={s.notesMap}
-                  otherWindows={s.otherWindows.filter((w) => w.windowId !== s.currentWindowId)}
                   actions={a}
                   cols={cols}
                   thumbnails={s.thumbnails}
@@ -247,29 +251,31 @@ export function HudOverlay() {
             </div>
 
             {/* AI history results (closed tabs from Neon) */}
-            {isAiMode && (historyResults.length > 0 || aiLoading) && (
+            {isAiMode && aiQuery && (
               <div
                 className="px-3 py-2 shrink-0"
                 style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}
               >
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                    {aiLoading ? 'Searching history...' : `History (${historyResults.length})`}
+                    {aiLoading ? 'Searching history...' : aiError ? 'API offline — start the API server to enable semantic search' : historyOnly.length > 0 ? `History (${historyOnly.length})` : 'No history found — browse more to build your search index'}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {historyOnly.slice(0, 6).map((r) => (
-                    <button
-                      key={r.url}
-                      onClick={() => chrome.tabs.create({ url: r.url })}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
-                      title={r.url}
-                    >
-                      <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
-                      <span className="text-[9px] text-white/20 shrink-0">reopen</span>
-                    </button>
-                  ))}
-                </div>
+                {!aiLoading && !aiError && historyOnly.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {historyOnly.slice(0, 6).map((r) => (
+                      <button
+                        key={r.url}
+                        onClick={() => chrome.tabs.create({ url: r.url })}
+                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
+                        title={r.url}
+                      >
+                        <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
+                        <span className="text-[9px] text-white/20 shrink-0">reopen</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -277,6 +283,7 @@ export function HudOverlay() {
 
         {/* Bottom section: workspaces + search — pinned to bottom */}
         <div className="shrink-0">
+          <GroupSuggestions tabs={s.tabs} actions={a} />
           <WorkspaceSection tabs={s.displayTabs} />
 
           <WindowStrip

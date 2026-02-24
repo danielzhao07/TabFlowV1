@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import type { TabInfo } from '@/lib/types';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
-import { SnoozeMenu } from './SnoozeMenu';
 
 const GROUP_COLORS: Record<string, string> = {
   blue: '#3b82f6', cyan: '#06b6d4', green: '#22c55e', yellow: '#eab308',
@@ -22,11 +21,9 @@ interface GridCardProps {
   onClose: (tabId: number) => void;
   onTogglePin: (tabId: number, pinned: boolean) => void;
   onToggleSelect: (tabId: number, shiftKey: boolean) => void;
-  onToggleBookmark: (tabId: number) => void;
-  onSnooze: (tabId: number, durationMs: number) => void;
-  onMoveToWindow: (tabId: number, windowId: number) => void;
-  onToggleMute: (tabId: number) => void;
-  otherWindows: { windowId: number; tabCount: number; title: string }[];
+  onDuplicate: (tabId: number) => void;
+  onMoveToNewWindow: (tabId: number) => void;
+  onReload: (tabId: number) => void;
   animDelay?: number;
 }
 
@@ -42,13 +39,11 @@ function domainColor(domain: string): string {
 
 export function GridCard({
   tab, index, isSelected, isMultiSelected, isBookmarked, isDuplicate, note, thumbnail,
-  onSwitch, onClose, onTogglePin, onToggleSelect, onToggleBookmark,
-  onSnooze, onMoveToWindow, onToggleMute, otherWindows, animDelay = 0,
+  onSwitch, onClose, onTogglePin, onToggleSelect,
+  onDuplicate, onMoveToNewWindow, onReload, animDelay = 0,
 }: GridCardProps) {
   const [faviconError, setFaviconError] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [snoozeMenu, setSnoozeMenu] = useState<{ x: number; y: number } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   const domain = getDomain(tab.url);
   const color = domainColor(domain);
@@ -71,47 +66,24 @@ export function GridCard({
 
   const contextItems: ContextMenuItem[] = [
     {
-      label: 'Switch to tab',
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
-      action: () => onSwitch(tab.tabId),
-    },
-    {
       label: tab.isPinned ? 'Unpin tab' : 'Pin tab',
       icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>,
       action: () => onTogglePin(tab.tabId, !tab.isPinned),
     },
     {
-      label: isBookmarked ? 'Remove bookmark' : 'Bookmark tab',
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>,
-      action: () => onToggleBookmark(tab.tabId),
+      label: 'Duplicate tab',
+      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>,
+      action: () => onDuplicate(tab.tabId),
     },
-    {
-      label: tab.isAudible ? 'Unmute tab' : 'Mute tab',
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6v12m-3.536-9.536a5 5 0 000 7.072" /></svg>,
-      action: () => onToggleMute(tab.tabId),
-    },
-    {
-      label: 'Snooze tab',
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-      action: () => {
-        const rect = cardRef.current?.getBoundingClientRect();
-        setSnoozeMenu({ x: rect ? rect.left : 0, y: rect ? rect.bottom : 0 });
-      },
-    },
-    {
-      label: 'Copy URL',
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
-      action: () => navigator.clipboard.writeText(tab.url),
-    },
-    ...otherWindows.map((w) => ({
-      label: `Move to: ${w.title.slice(0, 20)}`,
-      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>,
-      action: () => onMoveToWindow(tab.tabId, w.windowId),
-    })),
     {
       label: 'Move to new window',
       icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>,
-      action: () => onMoveToWindow(tab.tabId, -1),
+      action: () => onMoveToNewWindow(tab.tabId),
+    },
+    {
+      label: 'Reload tab',
+      icon: <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+      action: () => onReload(tab.tabId),
     },
     {
       label: 'Close tab',
@@ -131,7 +103,6 @@ export function GridCard({
   return (
     <>
       <div
-        ref={cardRef}
         className="h-full flex flex-col rounded-xl overflow-hidden cursor-pointer select-none"
         style={{
           animationName: 'cardIn',
@@ -164,9 +135,12 @@ export function GridCard({
           className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
           style={{ background: 'rgba(0,0,0,0.45)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
         >
-          {/* Group color dot */}
+          {/* Group indicator */}
           {groupColor && (
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: groupColor }} />
+            <div
+              className="w-1 self-stretch rounded-sm shrink-0 mr-0.5"
+              style={{ backgroundColor: groupColor }}
+            />
           )}
 
           {/* Favicon */}
@@ -190,6 +164,16 @@ export function GridCard({
           <span className="flex-1 text-[12px] text-white/80 truncate font-medium leading-none">
             {tab.title || domain}
           </span>
+
+          {/* Group name pill */}
+          {tab.groupTitle && groupColor && (
+            <span
+              className="text-[9px] px-1 py-0.5 rounded shrink-0 font-medium"
+              style={{ backgroundColor: groupColor + '30', color: groupColor }}
+            >
+              {tab.groupTitle}
+            </span>
+          )}
 
           {/* Status icons */}
           {tab.isPinned && <span className="text-[10px] text-amber-400/60 shrink-0">📌</span>}
@@ -264,15 +248,6 @@ export function GridCard({
           y={contextMenu.y}
           items={contextItems}
           onClose={() => setContextMenu(null)}
-        />
-      )}
-
-      {snoozeMenu && (
-        <SnoozeMenu
-          x={snoozeMenu.x}
-          y={snoozeMenu.y}
-          onSnooze={(ms) => onSnooze(tab.tabId, ms)}
-          onClose={() => setSnoozeMenu(null)}
         />
       )}
     </>

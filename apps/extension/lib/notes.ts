@@ -1,3 +1,5 @@
+import { syncNoteToCloud } from './api-client';
+
 export interface TabNote {
   url: string;
   note: string;
@@ -35,6 +37,7 @@ export async function saveNote(url: string, note: string): Promise<TabNote[]> {
     notes.push({ url, note: trimmed, updatedAt: Date.now() });
   }
   await chrome.storage.local.set({ [NOTES_KEY]: notes });
+  syncNoteToCloud(url, trimmed).catch(() => {});
   return notes;
 }
 

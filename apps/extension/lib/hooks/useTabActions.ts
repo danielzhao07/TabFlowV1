@@ -22,6 +22,9 @@ export interface TabActions {
   restoreSession: (sessionId: string) => Promise<void>;
   reopenLastClosed: () => Promise<void>;
   selectAll: () => void;
+  duplicateTab: (tabId: number) => void;
+  moveToNewWindow: (tabId: number) => Promise<void>;
+  reloadTab: (tabId: number) => void;
 }
 
 export function useTabActions(s: HudState): TabActions {
@@ -213,11 +216,24 @@ export function useTabActions(s: HudState): TabActions {
     });
   }, [s]);
 
+  const duplicateTab = useCallback((tabId: number) => {
+    chrome.runtime.sendMessage({ type: 'duplicate-tab', payload: { tabId } });
+  }, []);
+
+  const moveToNewWindow = useCallback(async (tabId: number) => {
+    await chrome.runtime.sendMessage({ type: 'move-to-window', payload: { tabId, windowId: -1 } });
+    s.fetchTabs();
+  }, [s]);
+
+  const reloadTab = useCallback((tabId: number) => {
+    chrome.runtime.sendMessage({ type: 'reload-tab', payload: { tabId } });
+  }, []);
+
   return {
     switchToTab, closeTab, togglePin, toggleSelect, closeSelectedTabs, closeDuplicates,
     groupSelectedTabs, ungroupSelectedTabs, toggleBookmark, saveNote, snoozeTab,
     moveToWindow, reorderTabs, toggleMute, closeByDomain, groupSuggestionTabs,
-    restoreSession, reopenLastClosed, selectAll,
+    restoreSession, reopenLastClosed, selectAll, duplicateTab, moveToNewWindow, reloadTab,
   };
 }
 

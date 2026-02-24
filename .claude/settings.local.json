@@ -32,7 +32,8 @@
       "mcp__chrome-devtools__navigate_page",
       "Bash(pm2 restart:*)",
       "Bash(pm2 delete:*)",
-      "Bash(pm2 start:*)"
+      "Bash(pm2 start:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

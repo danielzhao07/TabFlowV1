@@ -1,3 +1,5 @@
+import { syncSettingsToCloud } from './api-client';
+
 export interface TabFlowSettings {
   searchThreshold: number; // 0.0 (exact) to 1.0 (loose), default 0.4
   maxResults: number; // max tabs shown in HUD
@@ -31,5 +33,6 @@ export async function saveSettings(settings: Partial<TabFlowSettings>): Promise<
   const current = await getSettings();
   const updated = { ...current, ...settings };
   await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
+  syncSettingsToCloud(updated as unknown as Record<string, unknown>).catch(() => {});
   return updated;
 }
