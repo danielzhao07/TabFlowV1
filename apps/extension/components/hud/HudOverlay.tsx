@@ -132,11 +132,11 @@ export function HudOverlay() {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col"
+      className="fixed inset-0 flex flex-col items-center justify-center"
       style={{
         zIndex: 2147483647,
-        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0)',
-        backdropFilter: s.animatingIn ? 'blur(20px) saturate(180%)' : 'blur(0px)',
+        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
+        backdropFilter: s.animatingIn ? 'blur(24px) saturate(180%)' : 'blur(0px)',
         transition: 'background-color 180ms ease-out, backdrop-filter 180ms ease-out',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) s.hide(); }}
@@ -150,141 +150,146 @@ export function HudOverlay() {
           transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         }}
       >
-        {/* Minimal header with analytics */}
-        <div
-          className="flex items-center gap-2 px-4 py-2 shrink-0"
-          style={{ background: 'rgba(0,0,0,0.25)' }}
-        >
-          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/70" />
-          <span className="text-[11px] font-semibold text-white/40 tracking-widest uppercase">TabFlow</span>
-          <span className="text-[11px] text-white/20">·</span>
-          <span className="text-[11px] text-white/30">{s.displayTabs.length} tabs</span>
-          {backendOnline !== null && (
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded"
-              style={{
-                background: backendOnline ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)',
-                color: backendOnline ? 'rgba(134,239,172,0.7)' : 'rgba(255,255,255,0.2)',
-              }}
-              title={backendOnline ? 'API connected' : 'API offline — run: pnpm pm2:start'}
+        {/* Centered card container */}
+        <div className="flex-1 flex items-center justify-center min-h-0 px-8 py-6">
+          <div
+            className="flex flex-col rounded-2xl overflow-hidden"
+            style={{
+              background: 'rgba(18, 18, 30, 0.82)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+              maxWidth: 1100,
+              maxHeight: '75vh',
+              width: '100%',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Minimal header inside the container */}
+            <div className="flex items-center gap-3 px-4 py-2 shrink-0"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
             >
-              {backendOnline ? '⬤ api' : '○ api'}
-            </span>
-          )}
-          <div className="flex-1 flex justify-center">
-            <AnalyticsBar />
-          </div>
-          {authUser ? (
-            <button
-              onClick={async () => {
-                await chrome.runtime.sendMessage({ type: 'sign-out' });
-                setAuthUser(null);
-              }}
-              className="text-[10px] text-white/30 hover:text-white/60 transition-colors"
-              title="Sign out"
-            >
-              {authUser.email}
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              {authError && (
-                <span className="text-[9px] text-red-400/70 max-w-[160px] truncate" title={authError}>
-                  {authError}
-                </span>
-              )}
-              <button
-                onClick={async () => {
-                  setAuthLoading(true);
-                  setAuthError(null);
-                  try {
-                    const res = await chrome.runtime.sendMessage({ type: 'sign-in' });
-                    if (res?.success) {
-                      setAuthUser(res.tokenSet);
-                    } else {
-                      setAuthError(res?.error || 'Sign-in failed');
-                    }
-                  } catch (e: any) {
-                    setAuthError(e?.message || 'Sign-in failed');
-                  } finally {
-                    setAuthLoading(false);
-                  }
-                }}
-                disabled={authLoading}
-                className="text-[10px] px-2 py-0.5 rounded border border-cyan-400/20 text-cyan-400/60 hover:bg-cyan-400/10 hover:text-cyan-300 disabled:opacity-40 transition-colors"
-              >
-                {authLoading ? '…' : 'Sign in'}
-              </button>
-            </div>
-          )}
-          <div className="text-[10px] text-white/20">ESC to close</div>
-        </div>
+              <span className="text-[11px] font-medium text-white/30 tracking-wider uppercase">TabFlow</span>
+              <span className="text-[11px] text-white/15">{s.displayTabs.length} tabs</span>
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col min-h-0">
-          {s.isCommandMode ? (
-            <CommandPalette
-              query={s.commandQuery}
-              commands={commands}
-              onClose={() => s.setQuery('')}
-            />
-          ) : (
-            <TabGrid
-              tabs={s.displayTabs}
-              selectedIndex={s.selectedIndex}
-              selectedTabs={s.selectedTabs}
-              bookmarkedUrls={s.bookmarkedUrls}
-              duplicateUrls={s.duplicateUrls}
-              notesMap={s.notesMap}
-              otherWindows={s.otherWindows.filter((w) => w.windowId !== s.currentWindowId)}
-              actions={a}
-              cols={cols}
-              thumbnails={s.thumbnails}
-            />
-          )}
-
-          {/* AI history results (closed tabs from Neon) */}
-          {isAiMode && (historyResults.length > 0 || aiLoading) && (
-            <div
-              className="border-t border-white/[0.06] px-3 py-2 shrink-0"
-              style={{ background: 'rgba(0,0,0,0.3)' }}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[10px] text-cyan-400/60 uppercase tracking-wider">
-                  {aiLoading ? '⟳ Searching history…' : `✦ History (${historyResults.length})`}
-                </span>
+              <div className="flex-1 flex justify-center">
+                <AnalyticsBar />
               </div>
-              <div className="flex flex-wrap gap-2">
-                {historyOnly.slice(0, 6).map((r) => (
+
+              {/* Auth */}
+              {authUser ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-white/25">{authUser.email}</span>
                   <button
-                    key={r.url}
-                    onClick={() => chrome.tabs.create({ url: r.url })}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] hover:bg-cyan-400/10 hover:border-cyan-400/20 transition-colors text-left"
-                    title={r.url}
+                    onClick={async () => {
+                      await chrome.runtime.sendMessage({ type: 'sign-out' });
+                      setAuthUser(null);
+                    }}
+                    className="text-[10px] text-white/20 hover:text-white/50 transition-colors"
                   >
-                    <span className="text-[11px] text-white/55 truncate max-w-[180px]">{r.title}</span>
-                    <span className="text-[9px] text-white/20 shrink-0">↩ reopen</span>
+                    Sign out
                   </button>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  {authError && (
+                    <span className="text-[9px] text-red-400/60 max-w-[140px] truncate" title={authError}>
+                      {authError}
+                    </span>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setAuthLoading(true);
+                      setAuthError(null);
+                      try {
+                        const res = await chrome.runtime.sendMessage({ type: 'sign-in' });
+                        if (res?.success) {
+                          setAuthUser(res.tokenSet);
+                        } else {
+                          setAuthError(res?.error || 'Sign-in failed');
+                        }
+                      } catch (e: any) {
+                        setAuthError(e?.message || 'Sign-in failed');
+                      } finally {
+                        setAuthLoading(false);
+                      }
+                    }}
+                    disabled={authLoading}
+                    className="text-[10px] px-2 py-0.5 rounded border border-white/10 text-white/30 hover:bg-white/[0.06] hover:text-white/50 disabled:opacity-40 transition-colors"
+                  >
+                    {authLoading ? '...' : 'Sign in'}
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Tab grid */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {s.isCommandMode ? (
+                <CommandPalette
+                  query={s.commandQuery}
+                  commands={commands}
+                  onClose={() => s.setQuery('')}
+                />
+              ) : (
+                <TabGrid
+                  tabs={s.displayTabs}
+                  selectedIndex={s.selectedIndex}
+                  selectedTabs={s.selectedTabs}
+                  bookmarkedUrls={s.bookmarkedUrls}
+                  duplicateUrls={s.duplicateUrls}
+                  notesMap={s.notesMap}
+                  otherWindows={s.otherWindows.filter((w) => w.windowId !== s.currentWindowId)}
+                  actions={a}
+                  cols={cols}
+                  thumbnails={s.thumbnails}
+                />
+              )}
+            </div>
+
+            {/* AI history results (closed tabs from Neon) */}
+            {isAiMode && (historyResults.length > 0 || aiLoading) && (
+              <div
+                className="px-3 py-2 shrink-0"
+                style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] text-white/30 uppercase tracking-wider">
+                    {aiLoading ? 'Searching history...' : `History (${historyResults.length})`}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {historyOnly.slice(0, 6).map((r) => (
+                    <button
+                      key={r.url}
+                      onClick={() => chrome.tabs.create({ url: r.url })}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
+                      title={r.url}
+                    >
+                      <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
+                      <span className="text-[9px] text-white/20 shrink-0">reopen</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Workspace sync */}
-        <WorkspaceSection tabs={s.displayTabs} />
+        {/* Bottom section: workspaces + search — pinned to bottom */}
+        <div className="shrink-0">
+          <WorkspaceSection tabs={s.displayTabs} />
 
-        {/* Window strip */}
-        <WindowStrip
-          windows={s.otherWindows}
-          currentWindowId={s.currentWindowId}
-        />
+          <WindowStrip
+            windows={s.otherWindows}
+            currentWindowId={s.currentWindowId}
+          />
 
-        {/* Search bar */}
-        <BottomBar
-          query={s.query}
-          onQueryChange={s.setQuery}
-          isAiMode={isAiMode}
-        />
+          <BottomBar
+            query={s.query}
+            onQueryChange={s.setQuery}
+            isAiMode={isAiMode}
+          />
+        </div>
       </div>
 
       {s.showCheatSheet && (

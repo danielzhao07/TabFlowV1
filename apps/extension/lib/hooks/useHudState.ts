@@ -116,6 +116,7 @@ export function useHudState(): HudState {
     setAnimatingIn(false);
     setShowCheatSheet(false);
     setContextMenu(null);
+    chrome.runtime.sendMessage({ type: 'hud-closed' }).catch(() => {});
     setTimeout(() => {
       setVisible(false);
       setQuery('');

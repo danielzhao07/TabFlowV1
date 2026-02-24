@@ -123,10 +123,10 @@ export function GridCard({
   ];
 
   const borderColor = isSelected
-    ? 'rgba(6,182,212,0.85)'
+    ? 'rgba(255,255,255,0.7)'
     : isMultiSelected
-    ? 'rgba(6,182,212,0.4)'
-    : 'rgba(255,255,255,0.1)';
+    ? 'rgba(255,255,255,0.35)'
+    : 'rgba(255,255,255,0.06)';
 
   return (
     <>
@@ -139,19 +139,19 @@ export function GridCard({
           animationDelay: `${animDelay}ms`,
           animationFillMode: 'both',
           animationTimingFunction: 'cubic-bezier(0.16,1,0.3,1)',
-          background: 'rgba(15,15,28,0.88)',
+          background: 'rgba(15,15,28,0.92)',
           border: `1.5px solid ${borderColor}`,
           boxShadow: isSelected
-            ? `0 0 0 2px rgba(6,182,212,0.2), 0 8px 32px rgba(0,0,0,0.5)`
-            : '0 4px 20px rgba(0,0,0,0.4)',
+            ? `0 0 0 1px rgba(255,255,255,0.15), 0 8px 32px rgba(0,0,0,0.5)`
+            : '0 2px 12px rgba(0,0,0,0.3)',
           transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',
         }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.02)';
+          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.03)';
           if (!isSelected && !isMultiSelected) {
-            (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.25)';
+            (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)';
           }
         }}
         onMouseLeave={(e) => {

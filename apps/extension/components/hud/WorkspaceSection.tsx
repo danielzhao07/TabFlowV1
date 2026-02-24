@@ -34,15 +34,14 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
       setNameInput('');
       setShowInput(false);
     } catch (err: any) {
-      setError(err?.message?.includes('401') ? 'Auth error — disable Cognito in .env for local dev' : 'Failed to save — is the API running?');
+      setError(err?.message || 'Failed to save — is the API running?');
     } finally {
       setSaving(false);
     }
   };
 
   const handleRestore = (ws: Workspace) => {
-    // Open all workspace tabs in a new window
-    chrome.windows.create({ url: ws.tabs.map((t) => t.url) });
+    chrome.runtime.sendMessage({ type: 'restore-workspace', urls: ws.tabs.map((t) => t.url) });
   };
 
   const handleDelete = async (id: string) => {
@@ -62,7 +61,7 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
         {!showInput && (
           <button
             onClick={() => setShowInput(true)}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] hover:bg-cyan-400/10 hover:border-cyan-400/20 text-[10px] text-white/35 hover:text-white/60 transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] text-[10px] text-white/30 hover:text-white/50 transition-colors"
           >
             + Save current
           </button>
@@ -86,7 +85,7 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
             <button
               onClick={handleSave}
               disabled={saving || !nameInput.trim()}
-              className="px-2 py-0.5 rounded-md bg-cyan-400/20 border border-cyan-400/30 text-[10px] text-cyan-300 hover:bg-cyan-400/30 disabled:opacity-40 transition-colors"
+              className="px-2 py-0.5 rounded-md bg-white/[0.08] border border-white/[0.12] text-[10px] text-white/50 hover:bg-white/[0.12] disabled:opacity-40 transition-colors"
             >
               {saving ? '…' : 'Save'}
             </button>

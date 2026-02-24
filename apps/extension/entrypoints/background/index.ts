@@ -11,6 +11,9 @@ import { signIn, signOut, getStoredTokens } from '@/lib/auth';
 // Thumbnail cache: tabId → JPEG dataUrl (max 60 entries)
 const tabThumbnails = new Map<number, string>();
 
+// Track whether the HUD overlay is currently visible (skip captures while it's showing)
+let hudVisible = false;
+
 // Analytics: track focus time per tab
 let activeTabFocusStart = Date.now();
 let activeTabMeta: { tabId: number; url: string; domain: string; title: string } | null = null;
@@ -158,10 +161,14 @@ export default defineBackground(() => {
     if (command === 'toggle-hud') {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab?.id && canSendMessage(activeTab.url)) {
-        // Capture current tab now so HUD always has a fresh screenshot for it
-        captureThumbnail(activeTab.id, activeTab.windowId!);
+        // Capture BEFORE showing HUD so we get the actual page, not the overlay
+        if (!hudVisible) {
+          await captureThumbnail(activeTab.id, activeTab.windowId!);
+        }
+        hudVisible = !hudVisible;
         chrome.tabs.sendMessage(activeTab.id, { type: 'toggle-hud' }).catch(() => {
           // Content script not loaded on this tab
+          hudVisible = false; // reset if send failed
         });
       }
     }
@@ -413,6 +420,20 @@ export default defineBackground(() => {
       return true;
     }
 
+    // HUD visibility tracking — so we skip thumbnail captures while HUD is showing
+    if (message.type === 'hud-closed') {
+      hudVisible = false;
+      sendResponse({ success: true });
+      return true;
+    }
+
+    // Workspace restore — open all tabs in a new window
+    if (message.type === 'restore-workspace') {
+      chrome.windows.create({ url: message.urls });
+      sendResponse({ success: true });
+      return true;
+    }
+
     // Return all cached tab thumbnails
     if (message.type === 'get-all-thumbnails') {
       sendResponse({ thumbnails: Object.fromEntries(tabThumbnails) });
@@ -474,6 +495,7 @@ export default defineBackground(() => {
 });
 
 async function captureThumbnail(tabId: number, windowId: number) {
+  if (hudVisible) return; // skip capture while HUD overlay is showing
   try {
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     if (!tab || !canSendMessage(tab.url)) return;

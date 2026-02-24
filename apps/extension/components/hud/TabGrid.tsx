@@ -33,24 +33,15 @@ export function TabGrid({
     );
   }
 
-  const rows = Math.ceil(tabs.length / cols);
-
   return (
     <div
-      className="flex-1 min-h-0"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridTemplateRows: `repeat(${rows}, 1fr)`,
-        gap: 10,
-        padding: 12,
-        overflow: 'hidden',
-      }}
+      className="flex-1 flex flex-wrap justify-center content-center gap-2.5 p-4 min-h-0 overflow-hidden"
     >
       {tabs.map((tab, index) => (
         <div
           key={tab.tabId}
-          className="group h-full min-h-0"
+          className="group"
+          style={{ width: 200, height: 150 }}
           draggable
           onDragStart={() => { dragFromRef.current = index; }}
           onDragEnd={() => { dragFromRef.current = null; }}

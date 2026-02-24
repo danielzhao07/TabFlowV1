@@ -24,10 +24,7 @@ const USE_AUTH = process.env.COGNITO_USER_POOL_ID && process.env.COGNITO_CLIENT_
 
 // ---- Middleware ----
 app.use(cors({
-    origin: [
-        /^chrome-extension:\/\//,
-        /^http:\/\/localhost/,
-    ],
+    origin: true, // allow any origin — content scripts send from the page's origin
     credentials: true,
 }));
 app.use(express.json({ limit: '5mb' }));
