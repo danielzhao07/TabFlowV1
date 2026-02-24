@@ -1,9 +1,13 @@
 /**
  * Authentication middleware.
  *
- * Supports two modes:
- * 1. Cognito JWT (production) — when COGNITO_USER_POOL_ID is set
- * 2. Device-ID (dev/local) — x-device-id header used directly as user identity
+ * When Cognito is enabled:
+ *   1. If Bearer token present → validate JWT, use Cognito sub as user_id
+ *   2. If JWT fails or absent → fall back to x-device-id header
+ *   3. If neither → 401
+ *
+ * When Cognito is disabled:
+ *   - x-device-id header used directly as user identity
  */
 import { expressjwt } from 'express-jwt';
 import jwksRsa from 'jwks-rsa';
@@ -41,30 +45,50 @@ export function extractUserId(req: Request, _res: Response, next: NextFunction) 
 function deviceIdAuth(req: Request, res: Response, next: NextFunction) {
     const deviceId = req.headers['x-device-id'] as string;
     if (!deviceId) {
-        return res.status(401).json({ error: 'Missing x-device-id header. Set x-device-id to your device UUID.' });
+        return res.status(401).json({ error: 'Missing authentication. Provide a Bearer token or x-device-id header.' });
     }
     req.headers['x-user-id'] = deviceId;
     next();
 }
 
-export const cognitoAuth = USE_COGNITO ? cognitoJwt : deviceIdAuth;
+/** Flexible auth: try JWT first, fall back to device-id */
+function flexibleAuth(req: Request, res: Response, next: NextFunction) {
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+        cognitoJwt(req, res, (err: any) => {
+            if (!err) {
+                return extractUserId(req, res, next);
+            }
+            // JWT failed — fall back to device-id
+            const deviceId = req.headers['x-device-id'] as string;
+            if (deviceId) {
+                req.headers['x-user-id'] = deviceId;
+                return next();
+            }
+            return res.status(401).json({ error: 'Invalid token and no x-device-id fallback' });
+        });
+    } else {
+        deviceIdAuth(req, res, next);
+    }
+}
 
-export const requireAuth: Array<(req: Request, res: Response, next: NextFunction) => void> = USE_COGNITO
-    ? [cognitoJwt as any, extractUserId]
-    : [deviceIdAuth];
+export const cognitoAuth = USE_COGNITO ? flexibleAuth : deviceIdAuth;
+export const requireAuth: Array<(req: Request, res: Response, next: NextFunction) => void> = [
+    USE_COGNITO ? flexibleAuth : deviceIdAuth,
+];
 
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
-    if (!USE_COGNITO) {
-        const deviceId = req.headers['x-device-id'] as string;
-        if (deviceId) req.headers['x-user-id'] = deviceId;
-        return next();
-    }
+    const deviceId = req.headers['x-device-id'] as string;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return next();
+
+    if (authHeader?.startsWith('Bearer ') && USE_COGNITO) {
+        cognitoJwt(req, res, (err: any) => {
+            if (!err) return extractUserId(req, res, next);
+            if (deviceId) req.headers['x-user-id'] = deviceId;
+            next();
+        });
+    } else {
+        if (deviceId) req.headers['x-user-id'] = deviceId;
+        next();
     }
-    cognitoJwt(req, res, (err: any) => {
-        if (err) return next();
-        extractUserId(req, res, next);
-    });
 }

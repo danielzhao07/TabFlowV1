@@ -30,7 +30,9 @@
       "mcp__chrome-devtools__take_screenshot",
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__navigate_page",
-      "Bash(pm2 restart:*)"
+      "Bash(pm2 restart:*)",
+      "Bash(pm2 delete:*)",
+      "Bash(pm2 start:*)"
     ]
   }
 }
