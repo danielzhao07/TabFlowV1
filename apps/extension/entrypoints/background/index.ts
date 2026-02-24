@@ -5,20 +5,79 @@ import { recordVisit } from '@/lib/frecency';
 import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
 import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
 import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
+import { getApiUrl, getDeviceId } from '@/lib/api-client';
 
 // Thumbnail cache: tabId → JPEG dataUrl (max 60 entries)
 const tabThumbnails = new Map<number, string>();
+
+// Analytics: track focus time per tab
+let activeTabFocusStart = Date.now();
+let activeTabMeta: { tabId: number; url: string; domain: string; title: string } | null = null;
+
+function getDomainFromUrl(url: string): string {
+  try { return new URL(url).hostname.replace('www.', ''); } catch { return ''; }
+}
+
+/** Send tab visit analytics to the API (fire and forget) */
+async function reportVisit(url: string, domain: string, title: string, durationMs: number) {
+  if (!url || !domain || durationMs < 1000) return; // ignore very short visits
+  try {
+    const [apiUrl, deviceId] = await Promise.all([getApiUrl(), getDeviceId()]);
+    fetch(`${apiUrl}/api/analytics/visit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-device-id': deviceId },
+      body: JSON.stringify({ url, domain, title, durationMs }),
+    }).catch(() => {}); // silent fail if API down
+  } catch { /* ignore */ }
+}
+
+/** Embed a tab in the AI index — throttled to once per 12h per URL */
+async function maybeEmbedTab(url: string, title: string) {
+  if (!url || !title || !canSendMessage(url)) return;
+  try {
+    const cacheKey = `embed_ts_${url}`;
+    const cache = await chrome.storage.local.get(cacheKey);
+    const lastEmbedded = cache[cacheKey] as number | undefined;
+    if (lastEmbedded && Date.now() - lastEmbedded < 12 * 3600 * 1000) return;
+
+    const [apiUrl, deviceId] = await Promise.all([getApiUrl(), getDeviceId()]);
+    await fetch(`${apiUrl}/api/ai/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-device-id': deviceId },
+      body: JSON.stringify({ url, title }),
+    });
+    await chrome.storage.local.set({ [cacheKey]: Date.now() });
+  } catch { /* silent fail if API down */ }
+}
 
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
   initializeMRU();
 
-  // Track tab activation (MRU ordering + frecency + thumbnail capture)
+  // Track tab activation (MRU ordering + frecency + thumbnail capture + analytics)
   chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
+    // Record duration for the tab we're leaving
+    if (activeTabMeta) {
+      const durationMs = Date.now() - activeTabFocusStart;
+      reportVisit(activeTabMeta.url, activeTabMeta.domain, activeTabMeta.title, durationMs);
+    }
+
     await pushToFront(tabId, windowId);
     try {
       const tab = await chrome.tabs.get(tabId);
-      if (tab.url) recordVisit(tab.url);
+      if (tab.url) {
+        recordVisit(tab.url);
+        // Start tracking new tab
+        activeTabFocusStart = Date.now();
+        activeTabMeta = {
+          tabId,
+          url: tab.url,
+          domain: getDomainFromUrl(tab.url),
+          title: tab.title || '',
+        };
+        // Auto-embed for AI search (throttled)
+        maybeEmbedTab(tab.url, tab.title || '');
+      }
     } catch { /* tab may not exist */ }
     broadcastUpdate();
 
@@ -66,17 +125,17 @@ export default defineBackground(() => {
     }
   });
 
-  // Track tab removal
+  // Track tab removal — send targeted message for instant HUD update
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     await removeTab(tabId);
-    broadcastUpdate();
+    broadcastSpecific({ type: 'tab-removed', tabId });
   });
 
-  // Track new tabs
+  // Track new tabs — trigger full refetch in HUD
   chrome.tabs.onCreated.addListener(async (tab) => {
     if (tab.id) {
       await pushToFront(tab.id, tab.windowId);
-      broadcastUpdate();
+      broadcastSpecific({ type: 'tab-created' });
     }
   });
 
@@ -85,6 +144,8 @@ export default defineBackground(() => {
     if (command === 'toggle-hud') {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab?.id && canSendMessage(activeTab.url)) {
+        // Capture current tab now so HUD always has a fresh screenshot for it
+        captureThumbnail(activeTab.id, activeTab.windowId!);
         chrome.tabs.sendMessage(activeTab.id, { type: 'toggle-hud' }).catch(() => {
           // Content script not loaded on this tab
         });
@@ -269,6 +330,12 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'focus-window') {
+      const { windowId } = message.payload;
+      chrome.windows.update(windowId, { focused: true }).then(() => sendResponse({ success: true }));
+      return true;
+    }
+
     if (message.type === 'get-windows') {
       chrome.windows.getAll({ windowTypes: ['normal'] }).then(async (windows) => {
         const result = await Promise.all(
@@ -279,6 +346,7 @@ export default defineBackground(() => {
               windowId: w.id!,
               tabCount: tabs.length,
               title: activeTab?.title || `Window ${w.id}`,
+              faviconUrl: activeTab?.favIconUrl || '',
             };
           })
         );
@@ -405,13 +473,14 @@ async function updateBadge() {
 }
 
 function broadcastUpdate() {
-  // Only notify tabs where content scripts can actually run
+  broadcastSpecific({ type: 'tabs-updated' });
+}
+
+function broadcastSpecific(payload: object) {
   chrome.tabs.query({}).then((tabs) => {
     for (const tab of tabs) {
       if (tab.id && canSendMessage(tab.url)) {
-        chrome.tabs.sendMessage(tab.id, { type: 'tabs-updated' }).catch(() => {
-          // Content script not loaded on this tab, ignore
-        });
+        chrome.tabs.sendMessage(tab.id, payload).catch(() => {});
       }
     }
   });

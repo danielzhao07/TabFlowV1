@@ -5,12 +5,13 @@ import { searchTabs } from '@/lib/fuse-search';
 import { getSettings } from '@/lib/settings';
 import { getFrecencyMap, computeScore } from '@/lib/frecency';
 import type { TabBookmark } from '@/lib/bookmarks';
-import { semanticSearch } from '@/lib/api-client';
+// api-client imported in HudOverlay for AI history search
 
 export interface OtherWindow {
   windowId: number;
   tabCount: number;
   title: string;
+  faviconUrl: string;
 }
 
 export interface HudState {
@@ -84,10 +85,6 @@ export interface HudState {
   thumbnails: Map<number, string>;
   setThumbnails: Dispatch<SetStateAction<Map<number, string>>>;
 
-  // AI search
-  isAiMode: boolean;
-  aiLoading: boolean;
-
   // Fetch
   fetchTabs: () => Promise<void>;
   fetchRecentTabs: () => Promise<void>;
@@ -102,7 +99,7 @@ export function useHudState(): HudState {
   const [settings, setSettings] = useState<TabFlowSettings | null>(null);
   const [recentTabs, setRecentTabs] = useState<RecentTab[]>([]);
   const [currentWindowId, setCurrentWindowId] = useState<number | undefined>();
-  const [windowFilter, setWindowFilter] = useState<'all' | 'current'>('all');
+  const [windowFilter, setWindowFilter] = useState<'all' | 'current'>('current');
   const [selectedTabs, setSelectedTabs] = useState<Set<number>>(new Set());
   const [sortMode, setSortMode] = useState<'mru' | 'domain' | 'title' | 'frecency'>('mru');
   const [frecencyScores, setFrecencyScores] = useState<Map<string, number>>(new Map());
@@ -113,8 +110,6 @@ export function useHudState(): HudState {
   const [otherWindows, setOtherWindows] = useState<OtherWindow[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: number } | null>(null);
   const [thumbnails, setThumbnails] = useState<Map<number, string>>(new Map());
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiDisplayTabs, setAiDisplayTabs] = useState<TabInfo[]>([]);
   const lastToggleRef = useRef<number>(0);
 
   const hide = useCallback(() => {
@@ -191,43 +186,15 @@ export function useHudState(): HudState {
 
   const isCommandMode = query.startsWith('>');
   const commandQuery = isCommandMode ? query.slice(1).trim() : '';
-  const isAiMode = query.startsWith('ai:') || query.startsWith('?');
-  const aiQuery = isAiMode ? query.replace(/^(ai:|[?])/, '').trim() : '';
-
-  // Debounced AI semantic search when query starts with "ai:" or "?"
-  useEffect(() => {
-    if (!isAiMode || !aiQuery) {
-      setAiDisplayTabs([]);
-      return;
-    }
-    setAiLoading(true);
-    const timer = setTimeout(async () => {
-      try {
-        const deviceId = await getDeviceId();
-        const results = await semanticSearch(aiQuery, deviceId, 20);
-        // Match AI result URLs against open tabs, preserve score order
-        const urlToTab = new Map(tabs.map((t) => [t.url, t]));
-        const matched = results
-          .map((r) => urlToTab.get(r.url))
-          .filter((t): t is TabInfo => !!t);
-        setAiDisplayTabs(matched);
-      } catch {
-        setAiDisplayTabs([]);
-      } finally {
-        setAiLoading(false);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [isAiMode, aiQuery, tabs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isAiMode = query.startsWith('ai:');
 
   const filteredTabs = !query || isCommandMode || isAiMode
     ? sortedTabs
     : searchTabs(sortedTabs, query, settings?.searchThreshold, notesMap.size > 0 ? notesMap : undefined, duplicateUrls);
 
-  const baseTabs = isAiMode ? aiDisplayTabs : filteredTabs;
   const displayTabs = settings?.maxResults
-    ? baseTabs.slice(0, settings.maxResults)
-    : baseTabs;
+    ? filteredTabs.slice(0, settings.maxResults)
+    : filteredTabs;
 
   return {
     visible, setVisible, animatingIn, setAnimatingIn, lastToggleRef, hide,
@@ -247,21 +214,12 @@ export function useHudState(): HudState {
     thumbnails, setThumbnails,
     displayTabs, duplicateMap, duplicateUrls, duplicateCount,
     isCommandMode, commandQuery,
-    isAiMode, aiLoading,
     fetchTabs, fetchRecentTabs,
   };
 }
 
 function domain(url: string): string {
   try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
-}
-
-async function getDeviceId(): Promise<string> {
-  const result = await chrome.storage.local.get('tabflow_device_id');
-  if (result['tabflow_device_id']) return result['tabflow_device_id'] as string;
-  const id = crypto.randomUUID();
-  await chrome.storage.local.set({ tabflow_device_id: id });
-  return id;
 }
 
 // Called once on open to load all async data

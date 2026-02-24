@@ -104,6 +104,47 @@ aiRouter.post('/search', async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/ai/history?q=...&limit=10
+// Semantic search over all stored embeddings (including closed tabs from history)
+aiRouter.get('/history', async (req: Request, res: Response) => {
+    const userId = req.headers['x-user-id'] as string;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const query = (req.query.q as string)?.trim();
+    if (!query || query.length < 1) return res.status(400).json({ error: 'Missing query param ?q=' });
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 30);
+    try {
+        const queryEmbedding = await generateEmbedding(query);
+        const results = await db.execute(sql`
+      SELECT
+        url,
+        title,
+        updated_at,
+        1 - (
+          (SELECT SUM(a * b) FROM UNNEST(embedding, ${sql.raw(`ARRAY[${queryEmbedding.join(',')}]::real[]`)}) AS t(a, b))
+          / NULLIF(
+            SQRT((SELECT SUM(a * a) FROM UNNEST(embedding) AS t(a)))
+            * SQRT((SELECT SUM(b * b) FROM UNNEST(${sql.raw(`ARRAY[${queryEmbedding.join(',')}]::real[]`)}) AS t(b)))
+          , 0)
+        ) AS similarity
+      FROM tab_embeddings
+      WHERE user_id = ${userId}
+      ORDER BY similarity DESC
+      LIMIT ${limit}
+    `);
+        res.json({
+            results: (results as any[]).map((row: any) => ({
+                url: row.url,
+                title: row.title,
+                lastSeen: row.updated_at,
+                similarity: Math.round((1 - (row.similarity ?? 1)) * 100) / 100,
+            })),
+        });
+    } catch (error) {
+        console.error('History search failed:', error);
+        res.status(500).json({ error: 'History search failed' });
+    }
+});
+
 // GET /api/ai/health
 aiRouter.get('/health', async (_req: Request, res: Response) => {
     try {

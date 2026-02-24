@@ -14,7 +14,11 @@
       "Bash(aws --version)",
       "Bash(taskkill /F /IM node.exe)",
       "Bash(curl -s http://localhost:3001/health)",
-      "Bash(curl -s http://localhost:3001/api/ai/health)"
+      "Bash(curl -s http://localhost:3001/api/ai/health)",
+      "Bash(pm2 start dist/index.js --name tabflow-api)",
+      "Bash(pm2 save)",
+      "Bash(pm2-windows-startup install)",
+      "Bash(pm2 startup)"
     ]
   }
 }

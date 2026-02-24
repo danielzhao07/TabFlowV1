@@ -1,7 +1,6 @@
 /**
  * TabFlow API client — talks to the Express.js backend at apps/api.
- * The API URL is stored in chrome.storage.local under 'tabflow_api_url'.
- * Defaults to http://localhost:3001 for local development.
+ * Uses x-device-id for auth (device UUID stored in chrome.storage.local).
  */
 
 const DEFAULT_API_URL = 'http://localhost:3001';
@@ -11,15 +10,23 @@ export async function getApiUrl(): Promise<string> {
   return (result['tabflow_api_url'] as string) ?? DEFAULT_API_URL;
 }
 
-export async function setApiUrl(url: string): Promise<void> {
-  await chrome.storage.local.set({ tabflow_api_url: url });
+export async function getDeviceId(): Promise<string> {
+  const result = await chrome.storage.local.get('tabflow_device_id');
+  if (result['tabflow_device_id']) return result['tabflow_device_id'] as string;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ tabflow_device_id: id });
+  return id;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const base = await getApiUrl();
+  const [base, deviceId] = await Promise.all([getApiUrl(), getDeviceId()]);
   const res = await fetch(`${base}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-device-id': deviceId,
+      ...(options?.headers ?? {}),
+    },
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
@@ -28,31 +35,54 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // ---- Health check ----
 export async function checkHealth(): Promise<boolean> {
   try {
-    await request('/health');
+    await fetch(`${await getApiUrl()}/health`);
     return true;
   } catch {
     return false;
   }
 }
 
-// ---- Semantic search (AI) ----
-export interface SemanticResult {
-  tabId?: number;
-  url: string;
-  title: string;
-  score: number;
+// ---- AI: embed a tab ----
+export async function embedTab(url: string, title: string): Promise<void> {
+  await request('/api/ai/embed', {
+    method: 'POST',
+    body: JSON.stringify({ url, title }),
+  });
 }
 
-export async function semanticSearch(
-  query: string,
-  userId: string,
-  limit = 10,
-): Promise<SemanticResult[]> {
-  return request<SemanticResult[]>('/api/ai/search', {
+// ---- AI: semantic history search ----
+export interface HistoryResult {
+  url: string;
+  title: string;
+  lastSeen: string;
+  similarity: number;
+}
+
+export async function searchHistory(query: string, limit = 10): Promise<HistoryResult[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const data = await request<{ results: HistoryResult[] }>(`/api/ai/history?${params}`);
+  return data.results;
+}
+
+// ---- Analytics: record a tab visit ----
+export async function recordVisit(url: string, domain: string, durationMs: number, title?: string): Promise<void> {
+  await request('/api/analytics/visit', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-    body: JSON.stringify({ query, limit }),
+    body: JSON.stringify({ url, domain, durationMs, title }),
   });
+}
+
+// ---- Analytics: top domains ----
+export interface DomainStat {
+  domain: string;
+  total_visits: number;
+  total_duration_ms: number;
+  unique_pages: number;
+}
+
+export async function getTopDomains(limit = 5): Promise<DomainStat[]> {
+  const data = await request<{ domains: DomainStat[] }>(`/api/analytics/top-domains?limit=${limit}`);
+  return data.domains;
 }
 
 // ---- Sync: workspaces ----
@@ -63,39 +93,18 @@ export interface Workspace {
   createdAt: string;
 }
 
-export async function getWorkspaces(userId: string): Promise<Workspace[]> {
-  return request<Workspace[]>('/api/sync/workspaces', {
-    headers: { 'x-user-id': userId },
-  });
+export async function getWorkspaces(): Promise<Workspace[]> {
+  const data = await request<{ workspaces: Workspace[] }>('/api/sync/workspaces');
+  return data.workspaces;
 }
 
-export async function saveWorkspace(
-  userId: string,
-  name: string,
-  tabs: Workspace['tabs'],
-): Promise<Workspace> {
+export async function saveWorkspace(name: string, tabs: Workspace['tabs']): Promise<Workspace> {
   return request<Workspace>('/api/sync/workspaces', {
     method: 'POST',
-    headers: { 'x-user-id': userId },
     body: JSON.stringify({ name, tabs }),
   });
 }
 
-export async function deleteWorkspace(userId: string, id: string): Promise<void> {
-  await request(`/api/sync/workspaces/${id}`, {
-    method: 'DELETE',
-    headers: { 'x-user-id': userId },
-  });
-}
-
-// ---- Sync: settings ----
-export async function syncSettings(
-  userId: string,
-  settings: Record<string, unknown>,
-): Promise<void> {
-  await request('/api/sync/settings', {
-    method: 'POST',
-    headers: { 'x-user-id': userId },
-    body: JSON.stringify({ settings }),
-  });
+export async function deleteWorkspace(id: string): Promise<void> {
+  await request(`/api/sync/workspaces/${id}`, { method: 'DELETE' });
 }

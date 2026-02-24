@@ -4,16 +4,50 @@ import { useTabActions } from '@/lib/hooks/useTabActions';
 import { useKeyboardNav } from '@/lib/hooks/useKeyboardNav';
 import { TabGrid } from './TabGrid';
 import { BottomBar } from './BottomBar';
+import { WindowStrip } from './WindowStrip';
+import { WorkspaceSection } from './WorkspaceSection';
+import { AnalyticsBar } from './AnalyticsBar';
 import { CheatSheet } from './CheatSheet';
 import { UndoToast } from './UndoToast';
 import { CommandPalette, useCommands } from './CommandPalette';
-import { RecentlyClosedSection } from './RecentlyClosedSection';
-import { SnoozedSection } from './SnoozedSection';
+import { searchHistory, type HistoryResult } from '@/lib/api-client';
 
 export function HudOverlay() {
   const s = useHudState();
   const a = useTabActions(s);
-  const [cols, setCols] = useState(4);
+  const [historyResults, setHistoryResults] = useState<HistoryResult[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // Detect ai: prefix in query
+  const isAiMode = s.query.startsWith('ai:');
+  const aiQuery = isAiMode ? s.query.slice(3).trim() : '';
+
+  // Debounced AI history search
+  useEffect(() => {
+    if (!isAiMode || !aiQuery) {
+      setHistoryResults([]);
+      return;
+    }
+    setAiLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchHistory(aiQuery, 15);
+        setHistoryResults(results);
+      } catch {
+        setHistoryResults([]);
+      } finally {
+        setAiLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [isAiMode, aiQuery]);
+
+  // Separate open tabs from history-only results
+  const openUrls = new Set(s.tabs.map((t) => t.url));
+  const historyOnly = historyResults.filter((r) => !openUrls.has(r.url));
+
+  // Compute cols: prefer fewer, larger columns — matches Windows Task View feel
+  const cols = Math.max(1, Math.min(5, Math.ceil(Math.sqrt(s.displayTabs.length))));
 
   const panelRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -27,9 +61,9 @@ export function HudOverlay() {
     s.setSelectedIndex(0);
   }, [s.query]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for toggle messages from background
+  // Listen for messages from background
   useEffect(() => {
-    const listener = (message: { type: string }) => {
+    const listener = (message: { type: string; tabId?: number }) => {
       if (message.type === 'toggle-hud') {
         const now = Date.now();
         const timeSinceLastToggle = now - s.lastToggleRef.current;
@@ -57,6 +91,13 @@ export function HudOverlay() {
           s.hide();
           return prev;
         });
+      }
+
+      if (message.type === 'tab-removed' && s.visible && message.tabId) {
+        s.setTabs((prev) => prev.filter((t) => t.tabId !== message.tabId));
+      }
+      if (message.type === 'tab-created' && s.visible) {
+        s.fetchTabs();
       }
       if (message.type === 'tabs-updated' && s.visible) {
         s.fetchTabs();
@@ -87,8 +128,8 @@ export function HudOverlay() {
       className="fixed inset-0 flex flex-col"
       style={{
         zIndex: 2147483647,
-        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0)',
-        backdropFilter: s.animatingIn ? 'blur(8px)' : 'blur(0px)',
+        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0)',
+        backdropFilter: s.animatingIn ? 'blur(20px) saturate(180%)' : 'blur(0px)',
         transition: 'background-color 180ms ease-out, backdrop-filter 180ms ease-out',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) s.hide(); }}
@@ -102,28 +143,23 @@ export function HudOverlay() {
           transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         }}
       >
-        {/* Top header */}
+        {/* Minimal header with analytics */}
         <div
-          className="flex items-center gap-3 px-5 py-3 border-b border-white/[0.06] shrink-0"
-          style={{ background: 'rgba(8,8,20,0.9)' }}
+          className="flex items-center gap-2 px-4 py-2 shrink-0"
+          style={{ background: 'rgba(0,0,0,0.25)' }}
         >
-          <div className="w-2 h-2 rounded-full bg-cyan-400" />
-          <span className="text-[13px] font-semibold text-white/60 tracking-widest uppercase">TabFlow</span>
-          <div className="ml-auto flex items-center gap-3 text-[11px] text-white/20">
-            {s.isAiMode && (
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400/70 border border-cyan-500/20">
-                {s.aiLoading ? '⟳ AI searching…' : '✦ AI results'}
-              </span>
-            )}
-            <span>Ctrl+S sort · Ctrl+F window · Alt+Q close</span>
+          <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/70" />
+          <span className="text-[11px] font-semibold text-white/40 tracking-widest uppercase">TabFlow</span>
+          <span className="text-[11px] text-white/20">·</span>
+          <span className="text-[11px] text-white/30">{s.displayTabs.length} tabs</span>
+          <div className="flex-1 flex justify-center">
+            <AnalyticsBar />
           </div>
+          <div className="text-[10px] text-white/20">ESC to close</div>
         </div>
 
         {/* Main content */}
-        <div
-          className="flex-1 flex flex-col min-h-0"
-          style={{ background: 'rgba(10,10,22,0.92)', backdropFilter: 'blur(20px) saturate(160%)' }}
-        >
+        <div className="flex-1 flex flex-col min-h-0">
           {s.isCommandMode ? (
             <CommandPalette
               query={s.commandQuery}
@@ -141,31 +177,52 @@ export function HudOverlay() {
               otherWindows={s.otherWindows.filter((w) => w.windowId !== s.currentWindowId)}
               actions={a}
               cols={cols}
-              onColsChange={setCols}
               thumbnails={s.thumbnails}
             />
           )}
 
-          <SnoozedSection onWake={s.fetchTabs} />
-          <RecentlyClosedSection recentTabs={s.recentTabs} onRestore={a.restoreSession} />
+          {/* AI history results (closed tabs from Neon) */}
+          {isAiMode && (historyResults.length > 0 || aiLoading) && (
+            <div
+              className="border-t border-white/[0.06] px-3 py-2 shrink-0"
+              style={{ background: 'rgba(0,0,0,0.3)' }}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] text-cyan-400/60 uppercase tracking-wider">
+                  {aiLoading ? '⟳ Searching history…' : `✦ History (${historyResults.length})`}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {historyOnly.slice(0, 6).map((r) => (
+                  <button
+                    key={r.url}
+                    onClick={() => chrome.tabs.create({ url: r.url })}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] hover:bg-cyan-400/10 hover:border-cyan-400/20 transition-colors text-left"
+                    title={r.url}
+                  >
+                    <span className="text-[11px] text-white/55 truncate max-w-[180px]">{r.title}</span>
+                    <span className="text-[9px] text-white/20 shrink-0">↩ reopen</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Bottom search bar */}
+        {/* Workspace sync */}
+        <WorkspaceSection tabs={s.displayTabs} />
+
+        {/* Window strip */}
+        <WindowStrip
+          windows={s.otherWindows}
+          currentWindowId={s.currentWindowId}
+        />
+
+        {/* Search bar */}
         <BottomBar
           query={s.query}
           onQueryChange={s.setQuery}
-          tabCount={s.displayTabs.length}
-          totalCount={s.tabs.length}
-          selectedCount={s.selectedTabs.size}
-          duplicateCount={s.duplicateCount}
-          windowFilter={s.windowFilter}
-          onWindowFilterChange={s.setWindowFilter}
-          sortMode={s.sortMode}
-          onSortModeChange={s.setSortMode}
-          onCloseSelected={a.closeSelectedTabs}
-          onCloseDuplicates={a.closeDuplicates}
-          tabs={s.tabs}
-          onGroupSuggestion={a.groupSuggestionTabs}
+          isAiMode={isAiMode}
         />
       </div>
 

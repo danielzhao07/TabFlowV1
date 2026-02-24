@@ -37,7 +37,7 @@ function getDomain(url: string): string {
 function domainColor(domain: string): string {
   let hash = 0;
   for (let i = 0; i < domain.length; i++) hash = domain.charCodeAt(i) + ((hash << 5) - hash);
-  return `hsl(${Math.abs(hash) % 360}, 55%, 50%)`;
+  return `hsl(${Math.abs(hash) % 360}, 50%, 55%)`;
 }
 
 export function GridCard({
@@ -122,125 +122,84 @@ export function GridCard({
     },
   ];
 
+  const borderColor = isSelected
+    ? 'rgba(6,182,212,0.85)'
+    : isMultiSelected
+    ? 'rgba(6,182,212,0.4)'
+    : 'rgba(255,255,255,0.1)';
+
   return (
     <>
       <div
         ref={cardRef}
-        className="relative flex flex-col rounded-xl border overflow-hidden cursor-pointer select-none"
+        className="h-full flex flex-col rounded-xl overflow-hidden cursor-pointer select-none"
         style={{
-          // Entry animation with stagger
           animationName: 'cardIn',
-          animationDuration: '220ms',
+          animationDuration: '200ms',
           animationDelay: `${animDelay}ms`,
           animationFillMode: 'both',
           animationTimingFunction: 'cubic-bezier(0.16,1,0.3,1)',
-          // Border color based on state
-          borderColor: isSelected
-            ? 'rgba(6,182,212,0.8)'
-            : isMultiSelected
-            ? 'rgba(6,182,212,0.4)'
-            : 'rgba(255,255,255,0.1)',
+          background: 'rgba(15,15,28,0.88)',
+          border: `1.5px solid ${borderColor}`,
           boxShadow: isSelected
-            ? '0 0 0 2px rgba(6,182,212,0.3), 0 8px 24px rgba(0,0,0,0.3)'
-            : isMultiSelected
-            ? '0 0 0 1px rgba(6,182,212,0.2)'
-            : '0 4px 12px rgba(0,0,0,0.2)',
-          background: isMultiSelected
-            ? 'rgba(6,182,212,0.06)'
-            : 'rgba(255,255,255,0.04)',
-          transition: 'border-color 100ms, box-shadow 100ms, background 100ms, transform 120ms',
+            ? `0 0 0 2px rgba(6,182,212,0.2), 0 8px 32px rgba(0,0,0,0.5)`
+            : '0 4px 20px rgba(0,0,0,0.4)',
+          transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',
         }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.03)';
-          (e.currentTarget as HTMLDivElement).style.borderColor = isSelected ? 'rgba(6,182,212,0.9)' : 'rgba(255,255,255,0.2)';
+          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.02)';
+          if (!isSelected && !isMultiSelected) {
+            (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.25)';
+          }
         }}
         onMouseLeave={(e) => {
           (e.currentTarget as HTMLDivElement).style.transform = 'scale(1)';
-          (e.currentTarget as HTMLDivElement).style.borderColor = isSelected ? 'rgba(6,182,212,0.8)' : isMultiSelected ? 'rgba(6,182,212,0.4)' : 'rgba(255,255,255,0.1)';
+          (e.currentTarget as HTMLDivElement).style.borderColor = borderColor;
         }}
       >
-        {/* Group color accent bar */}
-        {groupColor && (
-          <div className="h-0.5 w-full" style={{ background: groupColor }} />
-        )}
-
-        {/* Thumbnail area */}
+        {/* Title bar at top — matches Windows Task View style */}
         <div
-          className="relative flex-1 flex items-center justify-center overflow-hidden"
-          style={{
-            minHeight: 110,
-            background: thumbnail
-              ? 'none'
-              : `radial-gradient(ellipse at center, ${color}18 0%, transparent 70%)`,
-            backgroundColor: thumbnail ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.2)',
-          }}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
+          style={{ background: 'rgba(0,0,0,0.45)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
         >
-          {/* Screenshot thumbnail (when available) */}
-          {thumbnail ? (
-            <img
-              src={thumbnail}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover object-top"
-              style={{ opacity: 0.75 }}
-            />
-          ) : tab.faviconUrl && !faviconError ? (
+          {/* Group color dot */}
+          {groupColor && (
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: groupColor }} />
+          )}
+
+          {/* Favicon */}
+          {tab.faviconUrl && !faviconError ? (
             <img
               src={tab.faviconUrl}
               alt=""
-              className="w-10 h-10 rounded-lg opacity-70"
+              className="w-4 h-4 rounded-sm shrink-0"
               onError={() => setFaviconError(true)}
             />
           ) : (
             <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold"
-              style={{ backgroundColor: color + '30', color }}
+              className="w-4 h-4 rounded-sm shrink-0 flex items-center justify-center text-[9px] font-bold"
+              style={{ backgroundColor: color + '35', color }}
             >
               {(tab.title || domain).charAt(0).toUpperCase()}
             </div>
           )}
 
-          {/* Status badges */}
-          <div className="absolute top-2 left-2 flex gap-1">
-            {tab.isPinned && (
-              <span className="px-1.5 py-0.5 rounded-md bg-black/50 text-[9px] text-amber-400">PIN</span>
-            )}
-            {tab.isAudible && (
-              <span className="px-1.5 py-0.5 rounded-md bg-black/50 text-[9px] text-green-400">
-                {tab.isAudible ? '♪' : ''}
-              </span>
-            )}
-            {tab.isDiscarded && (
-              <span className="px-1.5 py-0.5 rounded-md bg-black/50 text-[9px] text-white/30">ZZZ</span>
-            )}
-            {isDuplicate && (
-              <span className="px-1.5 py-0.5 rounded-md bg-amber-400/20 text-[9px] text-amber-400">DUP</span>
-            )}
-          </div>
+          {/* Title */}
+          <span className="flex-1 text-[12px] text-white/80 truncate font-medium leading-none">
+            {tab.title || domain}
+          </span>
 
-          {/* Number badge */}
-          {index < 9 && (
-            <kbd className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md bg-black/50 border border-white/10 text-[9px] text-white/30 font-mono">
-              {index + 1}
-            </kbd>
-          )}
+          {/* Status icons */}
+          {tab.isPinned && <span className="text-[10px] text-amber-400/60 shrink-0">📌</span>}
+          {tab.isAudible && <span className="text-[10px] text-green-400/70 shrink-0">♪</span>}
+          {isBookmarked && <span className="text-[10px] text-amber-400/60 shrink-0">★</span>}
 
-          {/* Bookmark star */}
-          {isBookmarked && (
-            <div className="absolute top-2 right-2 text-amber-400 opacity-70">
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-              </svg>
-            </div>
-          )}
-
-          {/* Close button (hover) */}
+          {/* Close button */}
           <button
-            className="absolute top-2 right-2 w-5 h-5 rounded-full bg-black/60 text-white/60 hover:text-white hover:bg-red-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ opacity: isSelected ? 0.7 : 0 }}
+            className="w-4 h-4 rounded flex items-center justify-center text-white/25 hover:text-white hover:bg-red-500/80 transition-colors shrink-0"
             onClick={(e) => { e.stopPropagation(); onClose(tab.tabId); }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
           >
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -248,21 +207,53 @@ export function GridCard({
           </button>
         </div>
 
-        {/* Footer: title + domain */}
-        <div className="px-2.5 py-2 border-t border-white/[0.06]" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
-          <div className="text-[12px] text-white/85 truncate font-medium leading-tight">
-            {tab.title || domain}
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            {groupColor && (
-              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: groupColor }} />
-            )}
-            <div className="text-[10px] text-white/30 truncate">
-              {tab.groupTitle ? `${tab.groupTitle} · ${domain}` : domain}
+        {/* Screenshot / Fallback — fills remaining card height */}
+        <div className="flex-1 relative overflow-hidden min-h-0">
+          {thumbnail ? (
+            <img
+              src={thumbnail}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover object-top"
+            />
+          ) : (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2"
+              style={{
+                background: `radial-gradient(ellipse at 50% 40%, ${color}22 0%, transparent 70%)`,
+                backgroundColor: 'rgba(0,0,0,0.15)',
+              }}
+            >
+              {tab.faviconUrl && !faviconError ? (
+                <img
+                  src={tab.faviconUrl}
+                  alt=""
+                  className="w-12 h-12 rounded-xl opacity-55"
+                  onError={() => setFaviconError(true)}
+                />
+              ) : (
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl font-bold"
+                  style={{ backgroundColor: color + '28', color }}
+                >
+                  {(tab.title || domain).charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-[11px] text-white/25 truncate px-3 max-w-full">{domain}</span>
             </div>
-          </div>
+          )}
+
+          {/* Duplicate badge */}
+          {isDuplicate && (
+            <div className="absolute top-1.5 left-1.5">
+              <span className="px-1.5 py-0.5 rounded-md bg-amber-400/20 text-[9px] text-amber-400">DUP</span>
+            </div>
+          )}
+
+          {/* Note indicator */}
           {note && (
-            <div className="text-[10px] text-cyan-400/50 truncate mt-0.5 italic">{note}</div>
+            <div className="absolute bottom-1.5 left-1.5 right-1.5">
+              <div className="text-[10px] text-cyan-400/50 truncate italic">{note}</div>
+            </div>
           )}
         </div>
       </div>
