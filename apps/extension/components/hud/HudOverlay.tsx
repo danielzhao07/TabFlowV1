@@ -158,7 +158,7 @@ export function HudOverlay() {
               background: 'rgba(18, 18, 30, 0.82)',
               border: '1px solid rgba(255,255,255,0.08)',
               boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
-              maxWidth: 1100,
+              maxWidth: 1300,
               maxHeight: '75vh',
               width: '100%',
             }}

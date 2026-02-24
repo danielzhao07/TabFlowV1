@@ -41,7 +41,7 @@ export function TabGrid({
         <div
           key={tab.tabId}
           className="group"
-          style={{ width: 200, height: 150 }}
+          style={{ width: 240, height: 175 }}
           draggable
           onDragStart={() => { dragFromRef.current = index; }}
           onDragEnd={() => { dragFromRef.current = null; }}

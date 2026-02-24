@@ -178,7 +178,19 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'get-tabs') {
       const senderWindowId = sender.tab?.windowId;
-      getMRUList().then((tabs) => sendResponse({ tabs, currentWindowId: senderWindowId }));
+      Promise.all([getMRUList(), chrome.tabs.query({})]).then(([mruTabs, chromeTabs]) => {
+        // Merge live Chrome data into MRU list to fix stale "New Tab" titles
+        const liveMap = new Map(chromeTabs.map((t) => [t.id!, t]));
+        for (const tab of mruTabs) {
+          const live = liveMap.get(tab.tabId);
+          if (live) {
+            if (live.title && live.title !== 'New Tab') tab.title = live.title;
+            if (live.url) tab.url = live.url;
+            if (live.favIconUrl) tab.faviconUrl = live.favIconUrl;
+          }
+        }
+        sendResponse({ tabs: mruTabs, currentWindowId: senderWindowId });
+      });
       return true; // async response
     }
 

@@ -99,10 +99,11 @@ export async function getWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function saveWorkspace(name: string, tabs: Workspace['tabs']): Promise<Workspace> {
-  return request<Workspace>('/api/sync/workspaces', {
+  const data = await request<{ workspace: Workspace }>('/api/sync/workspaces', {
     method: 'POST',
     body: JSON.stringify({ name, tabs }),
   });
+  return data.workspace;
 }
 
 export async function deleteWorkspace(id: string): Promise<void> {

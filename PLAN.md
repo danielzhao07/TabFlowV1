@@ -1,3 +1,21 @@
+# TabFlow — Implementation Plan (Updated)
+
+## Round 2 Fixes (Latest)
+
+### Bug 1: Workspace Restore [DONE]
+- `saveWorkspace` response unwrapped (`{ workspace: {...} }` → `Workspace`)
+- Restricted URLs (`chrome://`, `about:`) filtered on save AND restore
+
+### Bug 2: Card Size [DONE]
+- Cards increased from 200x150 to 240x175
+- Container maxWidth increased to 1300px
+
+### Bug 3: Stale "New Tab" Titles [DONE]
+- `get-tabs` handler now merges live `chrome.tabs.query()` data into MRU list
+- Fresh titles/URLs/favicons override stale cached values
+
+---
+
 # TabFlow HUD — 5 Bug Fixes & UI Redesign
 
 ## Context

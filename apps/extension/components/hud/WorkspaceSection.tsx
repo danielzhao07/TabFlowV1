@@ -28,7 +28,9 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
     setSaving(true);
     setError(null);
     try {
-      const tabData = tabs.map((t) => ({ url: t.url, title: t.title, faviconUrl: t.faviconUrl }));
+      const tabData = tabs
+        .filter((t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('about:'))
+        .map((t) => ({ url: t.url, title: t.title, faviconUrl: t.faviconUrl }));
       const ws = await saveWorkspace(name, tabData);
       setWorkspaces((prev) => [ws, ...prev]);
       setNameInput('');
@@ -41,7 +43,12 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
   };
 
   const handleRestore = (ws: Workspace) => {
-    chrome.runtime.sendMessage({ type: 'restore-workspace', urls: ws.tabs.map((t) => t.url) });
+    const urls = ws.tabs
+      .map((t) => t.url)
+      .filter((u) => u && !u.startsWith('chrome://') && !u.startsWith('chrome-extension://') && !u.startsWith('about:'));
+    if (urls.length > 0) {
+      chrome.runtime.sendMessage({ type: 'restore-workspace', urls });
+    }
   };
 
   const handleDelete = async (id: string) => {
