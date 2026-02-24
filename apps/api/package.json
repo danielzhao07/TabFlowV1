@@ -1,0 +1,37 @@
+{
+    "name": "tabflow-api",
+    "version": "0.2.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "db:push": "drizzle-kit push",
+        "db:generate": "drizzle-kit generate",
+        "db:migrate": "drizzle-kit migrate",
+        "db:studio": "drizzle-kit studio"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3.995.0",
+        "@aws-sdk/s3-request-presigner": "^3.995.0",
+        "@google/generative-ai": "^0.21.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "drizzle-orm": "^0.38.4",
+        "express": "^5.0.1",
+        "express-jwt": "^8.5.1",
+        "jwks-rsa": "^3.2.2",
+        "postgres": "^3.4.5",
+        "zod": "^3.24.2"
+    },
+    "devDependencies": {
+        "@aws-sdk/client-cognito-identity-provider": "^3.996.0",
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.13.4",
+        "drizzle-kit": "^0.30.4",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.3"
+    }
+}

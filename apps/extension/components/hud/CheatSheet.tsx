@@ -4,8 +4,8 @@ interface CheatSheetProps {
 
 const SHORTCUTS = [
   { section: 'Navigation', items: [
-    { keys: '↑ / ↓', desc: 'Move selection up/down' },
-    { keys: 'Tab / Shift+Tab', desc: 'Move selection down/up' },
+    { keys: '← → ↑ ↓', desc: 'Move selection in grid (2D)' },
+    { keys: 'Tab / Shift+Tab', desc: 'Move selection forward/back' },
     { keys: '1-9', desc: 'Jump to tab by position' },
     { keys: 'Enter', desc: 'Switch to selected tab' },
     { keys: 'Esc', desc: 'Close HUD' },
@@ -30,6 +30,7 @@ const SHORTCUTS = [
     { keys: 'Ctrl+F', desc: 'Toggle window filter (all / current)' },
     { keys: 'Ctrl+S', desc: 'Cycle sort mode' },
     { keys: '> ...', desc: 'Open command palette' },
+    { keys: 'ai: ...', desc: 'AI semantic search' },
     { keys: 'is:pinned', desc: 'Filter pinned tabs' },
     { keys: 'domain:x', desc: 'Filter by domain' },
     { keys: 'Right-click', desc: 'Context menu (snooze, move, etc.)' },

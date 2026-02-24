@@ -6,11 +6,14 @@ import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
 import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
 import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
 
+// Thumbnail cache: tabId → JPEG dataUrl (max 60 entries)
+const tabThumbnails = new Map<number, string>();
+
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
   initializeMRU();
 
-  // Track tab activation (MRU ordering + frecency)
+  // Track tab activation (MRU ordering + frecency + thumbnail capture)
   chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
     await pushToFront(tabId, windowId);
     try {
@@ -18,6 +21,9 @@ export default defineBackground(() => {
       if (tab.url) recordVisit(tab.url);
     } catch { /* tab may not exist */ }
     broadcastUpdate();
+
+    // Capture immediately — already-loaded tabs render instantly on activation
+    captureThumbnail(tabId, windowId);
   });
 
   // Track tab updates (title, URL, favicon changes)
@@ -49,6 +55,14 @@ export default defineBackground(() => {
     if (Object.keys(changes).length > 0) {
       await updateTab(tabId, changes);
       broadcastUpdate();
+    }
+
+    // Re-capture when a tab finishes loading (catches navigation in the active tab)
+    if (changeInfo.status === 'complete') {
+      try {
+        const tab = await chrome.tabs.get(tabId).catch(() => null);
+        if (tab?.active) captureThumbnail(tabId, tab.windowId);
+      } catch { /* tab may be gone */ }
     }
   });
 
@@ -302,6 +316,12 @@ export default defineBackground(() => {
       return true;
     }
 
+    // Return all cached tab thumbnails
+    if (message.type === 'get-all-thumbnails') {
+      sendResponse({ thumbnails: Object.fromEntries(tabThumbnails) });
+      return true;
+    }
+
     // Quick-switch: toggle between last two tabs
     if (message.type === 'quick-switch') {
       getMRUList().then((tabs) => {
@@ -355,6 +375,16 @@ export default defineBackground(() => {
     }
   });
 });
+
+async function captureThumbnail(tabId: number, windowId: number) {
+  try {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab || !canSendMessage(tab.url)) return;
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 55 });
+    tabThumbnails.set(tabId, dataUrl);
+    if (tabThumbnails.size > 60) tabThumbnails.delete(tabThumbnails.keys().next().value!);
+  } catch { /* capture may fail on restricted pages */ }
+}
 
 // Check if we can send messages to a tab (content scripts can't run on these URLs)
 function canSendMessage(url: string | undefined): boolean {

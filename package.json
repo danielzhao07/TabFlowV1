@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter extension dev",
+    "dev:api": "pnpm --filter tabflow-api dev",
     "build": "pnpm --filter extension build",
+    "build:api": "pnpm --filter tabflow-api build",
     "zip": "pnpm --filter extension zip"
   }
 }

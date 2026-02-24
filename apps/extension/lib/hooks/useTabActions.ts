@@ -1,0 +1,226 @@
+import { useCallback } from 'react';
+import type { TabBookmark } from '@/lib/bookmarks';
+import type { HudState } from './useHudState';
+
+export interface TabActions {
+  switchToTab: (tabId: number) => void;
+  closeTab: (tabId: number) => void;
+  togglePin: (tabId: number, pinned: boolean) => void;
+  toggleSelect: (tabId: number, shiftKey: boolean) => void;
+  closeSelectedTabs: () => void;
+  closeDuplicates: () => void;
+  groupSelectedTabs: () => Promise<void>;
+  ungroupSelectedTabs: () => Promise<void>;
+  toggleBookmark: (tabId: number) => Promise<void>;
+  saveNote: (tabId: number, url: string, note: string) => Promise<void>;
+  snoozeTab: (tabId: number, durationMs: number) => Promise<void>;
+  moveToWindow: (tabId: number, windowId: number) => Promise<void>;
+  reorderTabs: (fromIndex: number, toIndex: number) => Promise<void>;
+  toggleMute: (tabId: number) => Promise<void>;
+  closeByDomain: (tabId: number, domain: string) => Promise<void>;
+  groupSuggestionTabs: (tabIds: number[], domain: string) => Promise<void>;
+  restoreSession: (sessionId: string) => Promise<void>;
+  reopenLastClosed: () => Promise<void>;
+  selectAll: () => void;
+}
+
+export function useTabActions(s: HudState): TabActions {
+  const switchToTab = useCallback((tabId: number) => {
+    chrome.runtime.sendMessage({ type: 'switch-tab', payload: { tabId } });
+    s.hide();
+  }, [s]);
+
+  const closeTab = useCallback((tabId: number) => {
+    const closedTab = s.tabs.find((t) => t.tabId === tabId);
+    chrome.runtime.sendMessage({ type: 'close-tab', payload: { tabId } });
+    s.setTabs((prev) => {
+      const next = prev.filter((t) => t.tabId !== tabId);
+      s.setSelectedIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
+      return next;
+    });
+    if (closedTab) {
+      const title = closedTab.title.length > 30 ? closedTab.title.slice(0, 30) + '...' : closedTab.title;
+      s.setUndoToast({ message: `Closed "${title}"` });
+    }
+  }, [s]);
+
+  const togglePin = useCallback((tabId: number, pinned: boolean) => {
+    chrome.runtime.sendMessage({ type: 'pin-tab', payload: { tabId, pinned } });
+    s.setTabs((prev) => prev.map((t) => t.tabId === tabId ? { ...t, isPinned: pinned } : t));
+  }, [s]);
+
+  const toggleSelect = useCallback((tabId: number, shiftKey: boolean) => {
+    s.setSelectedTabs((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && prev.size > 0) {
+        const lastSelected = [...prev].pop()!;
+        const lastIdx = s.displayTabs.findIndex((t) => t.tabId === lastSelected);
+        const curIdx = s.displayTabs.findIndex((t) => t.tabId === tabId);
+        if (lastIdx !== -1 && curIdx !== -1) {
+          const [start, end] = lastIdx < curIdx ? [lastIdx, curIdx] : [curIdx, lastIdx];
+          for (let i = start; i <= end; i++) next.add(s.displayTabs[i].tabId);
+        }
+      } else {
+        if (next.has(tabId)) next.delete(tabId);
+        else next.add(tabId);
+      }
+      return next;
+    });
+  }, [s]);
+
+  const closeSelectedTabs = useCallback(() => {
+    for (const tabId of s.selectedTabs) {
+      chrome.runtime.sendMessage({ type: 'close-tab', payload: { tabId } });
+    }
+    const toClose = new Set(s.selectedTabs);
+    s.setTabs((prev) => {
+      const next = prev.filter((t) => !toClose.has(t.tabId));
+      s.setSelectedIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
+      return next;
+    });
+    s.setSelectedTabs(new Set());
+  }, [s]);
+
+  const closeDuplicates = useCallback(() => {
+    const toClose: number[] = [];
+    for (const [, ids] of s.duplicateMap) {
+      if (ids.length > 1) toClose.push(...ids.slice(1));
+    }
+    for (const tabId of toClose) {
+      chrome.runtime.sendMessage({ type: 'close-tab', payload: { tabId } });
+    }
+    const closeSet = new Set(toClose);
+    s.setTabs((prev) => {
+      const next = prev.filter((t) => !closeSet.has(t.tabId));
+      s.setSelectedIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
+      return next;
+    });
+  }, [s]);
+
+  const groupSelectedTabs = useCallback(async () => {
+    const tabIds = s.selectedTabs.size > 0
+      ? [...s.selectedTabs]
+      : s.displayTabs[s.selectedIndex] ? [s.displayTabs[s.selectedIndex].tabId] : [];
+    if (tabIds.length === 0) return;
+    const domainCounts = new Map<string, number>();
+    for (const id of tabIds) {
+      const tab = s.tabs.find((t) => t.tabId === id);
+      const d = getDomain(tab?.url ?? '');
+      domainCounts.set(d, (domainCounts.get(d) ?? 0) + 1);
+    }
+    let topDomain = '';
+    let topCount = 0;
+    for (const [d, c] of domainCounts) { if (c > topCount) { topDomain = d; topCount = c; } }
+    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: topDomain.split('.')[0] || '' } });
+    s.setSelectedTabs(new Set());
+    s.fetchTabs();
+  }, [s]);
+
+  const ungroupSelectedTabs = useCallback(async () => {
+    const tabIds = s.selectedTabs.size > 0
+      ? [...s.selectedTabs]
+      : s.displayTabs[s.selectedIndex] ? [s.displayTabs[s.selectedIndex].tabId] : [];
+    if (tabIds.length === 0) return;
+    await chrome.runtime.sendMessage({ type: 'ungroup-tabs', payload: { tabIds } });
+    s.setSelectedTabs(new Set());
+    s.fetchTabs();
+  }, [s]);
+
+  const toggleBookmark = useCallback(async (tabId: number) => {
+    const tab = s.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    if (s.bookmarkedUrls.has(tab.url)) {
+      const res = await chrome.runtime.sendMessage({ type: 'remove-bookmark', payload: { url: tab.url } });
+      if (res?.bookmarks) s.setBookmarkedUrls(new Set(res.bookmarks.map((b: TabBookmark) => b.url)));
+    } else {
+      const res = await chrome.runtime.sendMessage({ type: 'add-bookmark', payload: { url: tab.url, title: tab.title, faviconUrl: tab.faviconUrl } });
+      if (res?.bookmarks) s.setBookmarkedUrls(new Set(res.bookmarks.map((b: TabBookmark) => b.url)));
+    }
+  }, [s]);
+
+  const saveNote = useCallback(async (_tabId: number, url: string, note: string) => {
+    await chrome.runtime.sendMessage({ type: 'save-note', payload: { url, note } });
+    s.setNotesMap((prev) => {
+      const next = new Map(prev);
+      if (note.trim()) next.set(url, note.trim());
+      else next.delete(url);
+      return next;
+    });
+  }, [s]);
+
+  const snoozeTab = useCallback(async (tabId: number, durationMs: number) => {
+    const tab = s.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    await chrome.runtime.sendMessage({ type: 'snooze-tab', payload: { tabId, url: tab.url, title: tab.title, faviconUrl: tab.faviconUrl, durationMs } });
+    s.setTabs((prev) => {
+      const next = prev.filter((t) => t.tabId !== tabId);
+      s.setSelectedIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
+      return next;
+    });
+    const title = tab.title.length > 30 ? tab.title.slice(0, 30) + '...' : tab.title;
+    s.setUndoToast({ message: `Snoozed "${title}"` });
+  }, [s]);
+
+  const moveToWindow = useCallback(async (tabId: number, windowId: number) => {
+    await chrome.runtime.sendMessage({ type: 'move-to-window', payload: { tabId, windowId } });
+    s.fetchTabs();
+    const res = await chrome.runtime.sendMessage({ type: 'get-windows' });
+    if (res?.windows) s.setOtherWindows(res.windows);
+  }, [s]);
+
+  const reorderTabs = useCallback(async (fromIndex: number, toIndex: number) => {
+    const tab = s.displayTabs[fromIndex];
+    if (!tab || !s.displayTabs[toIndex]) return;
+    try {
+      await chrome.tabs.move(tab.tabId, { index: toIndex });
+      s.fetchTabs();
+    } catch { /* tab may be gone */ }
+  }, [s]);
+
+  const toggleMute = useCallback(async (tabId: number) => {
+    const tab = s.tabs.find((t) => t.tabId === tabId);
+    if (!tab) return;
+    await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId, muted: !tab.isAudible } });
+    s.fetchTabs();
+  }, [s]);
+
+  const closeByDomain = useCallback(async (tabId: number, domain: string) => {
+    await chrome.runtime.sendMessage({ type: 'close-by-domain', payload: { domain, excludeTabId: tabId } });
+    s.fetchTabs();
+  }, [s]);
+
+  const groupSuggestionTabs = useCallback(async (tabIds: number[], domain: string) => {
+    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: domain.split('.')[0] || domain } });
+    s.fetchTabs();
+  }, [s]);
+
+  const restoreSession = useCallback(async (sessionId: string) => {
+    await chrome.runtime.sendMessage({ type: 'restore-session', payload: { sessionId } });
+    s.fetchTabs();
+    s.fetchRecentTabs();
+  }, [s]);
+
+  const reopenLastClosed = useCallback(async () => {
+    const res = await chrome.runtime.sendMessage({ type: 'reopen-last-closed' });
+    if (res?.success) { s.fetchTabs(); s.fetchRecentTabs(); }
+  }, [s]);
+
+  const selectAll = useCallback(() => {
+    const allIds = new Set(s.displayTabs.map((t) => t.tabId));
+    s.setSelectedTabs((prev) => {
+      if (s.displayTabs.every((t) => prev.has(t.tabId))) return new Set();
+      return allIds;
+    });
+  }, [s]);
+
+  return {
+    switchToTab, closeTab, togglePin, toggleSelect, closeSelectedTabs, closeDuplicates,
+    groupSelectedTabs, ungroupSelectedTabs, toggleBookmark, saveNote, snoozeTab,
+    moveToWindow, reorderTabs, toggleMute, closeByDomain, groupSuggestionTabs,
+    restoreSession, reopenLastClosed, selectAll,
+  };
+}
+
+function getDomain(url: string): string {
+  try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+}

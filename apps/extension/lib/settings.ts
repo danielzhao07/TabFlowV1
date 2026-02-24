@@ -6,6 +6,7 @@ export interface TabFlowSettings {
   theme: 'dark' | 'light';
   autoSuspend: boolean; // auto-discard inactive tabs
   autoSuspendMinutes: number; // minutes of inactivity before discarding
+  gridColumns: number; // 0 = auto (responsive), otherwise fixed column count
 }
 
 const SETTINGS_KEY = 'tabflow_settings';
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: TabFlowSettings = {
   theme: 'dark',
   autoSuspend: false,
   autoSuspendMinutes: 30,
+  gridColumns: 0,
 };
 
 export async function getSettings(): Promise<TabFlowSettings> {
