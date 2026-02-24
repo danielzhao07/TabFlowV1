@@ -10,13 +10,18 @@ import { AnalyticsBar } from './AnalyticsBar';
 import { CheatSheet } from './CheatSheet';
 import { UndoToast } from './UndoToast';
 import { CommandPalette, useCommands } from './CommandPalette';
-import { searchHistory, type HistoryResult } from '@/lib/api-client';
+import { searchHistory, checkHealth, type HistoryResult } from '@/lib/api-client';
+import { getStoredTokens, type TokenSet } from '@/lib/auth';
 
 export function HudOverlay() {
   const s = useHudState();
   const a = useTabActions(s);
   const [historyResults, setHistoryResults] = useState<HistoryResult[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [authUser, setAuthUser] = useState<TokenSet | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Detect ai: prefix in query
   const isAiMode = s.query.startsWith('ai:');
@@ -86,6 +91,8 @@ export function HudOverlay() {
                 ));
               }
             }).catch(() => {});
+            checkHealth().then(setBackendOnline);
+            getStoredTokens().then(setAuthUser);
             return true;
           }
           s.hide();
@@ -152,9 +159,63 @@ export function HudOverlay() {
           <span className="text-[11px] font-semibold text-white/40 tracking-widest uppercase">TabFlow</span>
           <span className="text-[11px] text-white/20">·</span>
           <span className="text-[11px] text-white/30">{s.displayTabs.length} tabs</span>
+          {backendOnline !== null && (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{
+                background: backendOnline ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)',
+                color: backendOnline ? 'rgba(134,239,172,0.7)' : 'rgba(255,255,255,0.2)',
+              }}
+              title={backendOnline ? 'API connected' : 'API offline — run: pnpm pm2:start'}
+            >
+              {backendOnline ? '⬤ api' : '○ api'}
+            </span>
+          )}
           <div className="flex-1 flex justify-center">
             <AnalyticsBar />
           </div>
+          {authUser ? (
+            <button
+              onClick={async () => {
+                await chrome.runtime.sendMessage({ type: 'sign-out' });
+                setAuthUser(null);
+              }}
+              className="text-[10px] text-white/30 hover:text-white/60 transition-colors"
+              title="Sign out"
+            >
+              {authUser.email}
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              {authError && (
+                <span className="text-[9px] text-red-400/70 max-w-[160px] truncate" title={authError}>
+                  {authError}
+                </span>
+              )}
+              <button
+                onClick={async () => {
+                  setAuthLoading(true);
+                  setAuthError(null);
+                  try {
+                    const res = await chrome.runtime.sendMessage({ type: 'sign-in' });
+                    if (res?.success) {
+                      setAuthUser(res.tokenSet);
+                    } else {
+                      setAuthError(res?.error || 'Sign-in failed');
+                    }
+                  } catch (e: any) {
+                    setAuthError(e?.message || 'Sign-in failed');
+                  } finally {
+                    setAuthLoading(false);
+                  }
+                }}
+                disabled={authLoading}
+                className="text-[10px] px-2 py-0.5 rounded border border-cyan-400/20 text-cyan-400/60 hover:bg-cyan-400/10 hover:text-cyan-300 disabled:opacity-40 transition-colors"
+              >
+                {authLoading ? '…' : 'Sign in'}
+              </button>
+            </div>
+          )}
           <div className="text-[10px] text-white/20">ESC to close</div>
         </div>
 

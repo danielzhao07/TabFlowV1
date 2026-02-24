@@ -6,6 +6,7 @@ import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
 import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
 import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
 import { getApiUrl, getDeviceId } from '@/lib/api-client';
+import { signIn, signOut, getStoredTokens } from '@/lib/auth';
 
 // Thumbnail cache: tabId → JPEG dataUrl (max 60 entries)
 const tabThumbnails = new Map<number, string>();
@@ -53,6 +54,19 @@ async function maybeEmbedTab(url: string, title: string) {
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
   initializeMRU();
+
+  // Log the redirect URL so it can be verified in Cognito settings
+  console.log('[TabFlow] Cognito redirect URL:', chrome.identity.getRedirectURL());
+
+  // First install: auto-trigger sign-in popup
+  chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+    if (reason === 'install') {
+      const existing = await getStoredTokens();
+      if (!existing) {
+        signIn().catch(() => {}); // user may cancel — that's fine
+      }
+    }
+  });
 
   // Track tab activation (MRU ordering + frecency + thumbnail capture + analytics)
   chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
@@ -381,6 +395,21 @@ export default defineBackground(() => {
         }
         sendResponse({ success: true, count: toClose.length });
       })();
+      return true;
+    }
+
+    // Sign in/out — chrome.identity is only available in background, not content scripts
+    if (message.type === 'sign-in') {
+      signIn()
+        .then((tokenSet) => sendResponse({ success: true, tokenSet }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (message.type === 'sign-out') {
+      signOut()
+        .then(() => sendResponse({ success: true }))
+        .catch(() => sendResponse({ success: false }));
       return true;
     }
 

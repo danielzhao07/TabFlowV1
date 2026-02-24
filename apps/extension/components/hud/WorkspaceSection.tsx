@@ -33,8 +33,8 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
       setWorkspaces((prev) => [ws, ...prev]);
       setNameInput('');
       setShowInput(false);
-    } catch {
-      setError('API offline — start the backend first');
+    } catch (err: any) {
+      setError(err?.message?.includes('401') ? 'Auth error — disable Cognito in .env for local dev' : 'Failed to save — is the API running?');
     } finally {
       setSaving(false);
     }

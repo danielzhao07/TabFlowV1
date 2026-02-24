@@ -15,6 +15,7 @@ import { syncRouter } from './routes/sync.js';
 import { aiRouter } from './routes/ai.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { thumbnailRouter } from './routes/thumbnails.js';
+import { authRouter } from './routes/auth.js';
 import { requireAuth } from './middleware/auth.js';
 
 const app = express();
@@ -38,6 +39,9 @@ if (process.env.NODE_ENV !== 'production') {
         next();
     });
 }
+
+// ---- Auth (public — token exchange proxy, no JWT required) ----
+app.use('/api/auth', authRouter);
 
 // ---- Health Check (public) ----
 app.get('/health', (_req, res) => {

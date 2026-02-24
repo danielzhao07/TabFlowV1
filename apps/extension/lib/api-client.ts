@@ -1,7 +1,8 @@
 /**
  * TabFlow API client — talks to the Express.js backend at apps/api.
- * Uses x-device-id for auth (device UUID stored in chrome.storage.local).
+ * Sends Cognito Bearer token when signed in, falls back to x-device-id for local dev.
  */
+import { getValidToken } from './auth';
 
 const DEFAULT_API_URL = 'http://localhost:3001';
 
@@ -19,15 +20,14 @@ export async function getDeviceId(): Promise<string> {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const [base, deviceId] = await Promise.all([getApiUrl(), getDeviceId()]);
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-device-id': deviceId,
-      ...(options?.headers ?? {}),
-    },
-  });
+  const [base, deviceId, token] = await Promise.all([getApiUrl(), getDeviceId(), getValidToken()]);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-device-id': deviceId,
+    ...(options?.headers as Record<string, string> ?? {}),
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${base}${path}`, { ...options, headers });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }

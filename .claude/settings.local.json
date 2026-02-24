@@ -18,7 +18,19 @@
       "Bash(pm2 start dist/index.js --name tabflow-api)",
       "Bash(pm2 save)",
       "Bash(pm2-windows-startup install)",
-      "Bash(pm2 startup)"
+      "Bash(pm2 startup)",
+      "Bash(pm2 logs:*)",
+      "Bash(pm2 status:*)",
+      "Bash(timeout 8 node_modules/.bin/tsx:*)",
+      "Bash(echo:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c:*)",
+      "Bash(curl:*)",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__navigate_page",
+      "Bash(pm2 restart:*)"
     ]
   }
 }
