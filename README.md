@@ -22,11 +22,11 @@ A full-stack Chrome extension that replaces the browser's native tab switcher wi
 
 Power users juggle dozens of tabs across multiple windows. The native Chrome tab bar doesn't scale — tabs shrink to unreadable slivers, and Ctrl+Tab cycles linearly instead of by recency. TabFlow solves this with:
 
-- **MRU-first navigation** — tabs sorted by last access, not position
-- **Full-screen grid overlay** — inspired by Windows Alt+Tab, with visual thumbnails
-- **Fuzzy + semantic search** — find tabs by memory, not by hunting through a bar
-- **Cloud-synced workspaces** — save and restore tab sets across devices
-- **Zero-config analytics** — passive browsing insights without any setup
+- **MRU-first navigation** - tabs sorted by last access, not position
+- **Full-screen grid overlay** - inspired by Windows Alt+Tab, with visual thumbnails
+- **Fuzzy + semantic search** - find tabs by memory, not by hunting through a bar
+- **Cloud-synced workspaces** - save and restore tab sets across devices
+- **Zero-config analytics** - passive browsing insights without any setup
 
 ---
 
@@ -99,51 +99,6 @@ Power users juggle dozens of tabs across multiple windows. The native Chrome tab
 | **AWS S3** | Tab screenshot storage with presigned URLs |
 | **AWS App Runner** | Containerized API deployment with auto-scaling |
 | **Google Gemini** | Embedding model for semantic tab search |
-
----
-
-## Architecture
-
-```
-tabflow/
-├── apps/
-│   ├── extension/                  # Chrome extension (Manifest V3)
-│   │   ├── entrypoints/
-│   │   │   ├── background/         # Service worker — MRU tracking, thumbnail capture,
-│   │   │   │                       #   analytics, snooze alarms, tab embedding, message bus
-│   │   │   ├── content/            # Mounts HudOverlay into shadow DOM
-│   │   │   ├── options/            # Settings page
-│   │   │   └── popup/              # Toolbar popup
-│   │   ├── components/hud/         # 14 React components (HudOverlay, TabGrid, GridCard,
-│   │   │                           #   BottomBar, ContextMenu, CommandPalette, etc.)
-│   │   └── lib/
-│   │       ├── hooks/              # useHudState, useTabActions, useKeyboardNav
-│   │       └── *.ts                # Search, frecency, bookmarks, notes, snooze,
-│   │                               #   API client, auth (PKCE), settings, types
-│   └── api/                        # Express.js v5 REST API
-│       └── src/
-│           ├── db/                 # Drizzle schema (7 tables) + Neon connection
-│           ├── routes/             # sync, ai, analytics, thumbnails, auth
-│           ├── middleware/         # Cognito JWT auth with device-ID fallback
-│           └── services/           # S3 upload / presigned URLs / deletion
-└── .github/workflows/ci.yml       # Build + type-check CI pipeline
-```
-
-### Data Flow
-
-```
-Alt+Q
- └─▸ Background service worker
-       ├── captureVisibleTab()  →  LRU thumbnail cache (max 60)
-       ├── embedTab()           →  POST /api/ai/embed  →  Gemini  →  pgvector
-       └── toggleHUD message    →  content script (shadow DOM)
-             └─▸ HudOverlay (React)
-                   ├── fetchTabs()     →  background: MRU + live Chrome tabs
-                   ├── workspaces      →  GET  /api/sync/workspaces
-                   ├── ai: <query>     →  GET  /api/ai/history?q=  (pgvector)
-                   ├── analytics       →  GET  /api/analytics/top-domains
-                   └── visit tracking  →  POST /api/analytics/visit
-```
 
 ---
 
