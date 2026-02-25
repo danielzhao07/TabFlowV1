@@ -12,3 +12,13 @@ dist/
 .copilot/
 .aider*
 .codeium/
+.mcp.json
+
+# Internal planning docs
+PLAN.md
+SETUP.md
+agent.md
+implementation.md
+
+# Test scripts
+apps/api/test-aws.mjs
