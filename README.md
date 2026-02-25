@@ -1,95 +1,67 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/Manifest-V3-blue?logo=googlechrome&logoColor=white" alt="Manifest V3" />
+  <img src="https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white" alt="Express 5" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white" alt="Neon PostgreSQL" />
+  <img src="https://github.com/danielzhao07/TabFlowV1/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  <img src="https://img.shields.io/github/license/danielzhao07/TabFlowV1" alt="License" />
+  <img src="https://img.shields.io/github/last-commit/danielzhao07/TabFlowV1?color=green" alt="Last Commit" />
+</p>
+
 # TabFlow
 
-A full-stack Chrome extension that replaces the browser's native tab switcher with an
-intelligent, keyboard-driven HUD. Tabs are navigated through a full-screen overlay inspired
-by Windows Alt+Tab, with fuzzy search, natural-language AI search over browsing history,
-cloud-synced workspaces, passive analytics, and automatic tab group suggestions.
+A full-stack Chrome extension that replaces the browser's native tab switcher with an intelligent, keyboard-driven HUD overlay. Built as a monorepo with a **React 19 extension frontend**, an **Express.js v5 REST API**, **Neon serverless PostgreSQL**, **Gemini AI embeddings** for semantic search, and **AWS Cognito/S3** for auth and storage.
 
-Built end-to-end: Chrome extension (Manifest V3) + REST API (Express.js v5) + Neon
-serverless PostgreSQL + Gemini AI embeddings + AWS Cognito OAuth 2.0 + S3.
+<!-- Add a demo GIF or screenshot here for maximum recruiter impact -->
+<!-- ![TabFlow Demo](docs/demo.gif) -->
+
+---
+
+## Why TabFlow?
+
+Power users juggle dozens of tabs across multiple windows. The native Chrome tab bar doesn't scale — tabs shrink to unreadable slivers, and Ctrl+Tab cycles linearly instead of by recency. TabFlow solves this with:
+
+- **MRU-first navigation** — tabs sorted by last access, not position
+- **Full-screen grid overlay** — inspired by Windows Alt+Tab, with visual thumbnails
+- **Fuzzy + semantic search** — find tabs by memory, not by hunting through a bar
+- **Cloud-synced workspaces** — save and restore tab sets across devices
+- **Zero-config analytics** — passive browsing insights without any setup
 
 ---
 
 ## Features
 
-### Tab Management
-- Full-screen HUD overlay triggered by Alt+Q, with blur backdrop and stagger animation
-- Most Recently Used (MRU) ordering — tabs sorted by last-accessed time, tracked by a
-  background service worker across all windows and sessions
-- Fuzzy search across titles, URLs, and notes using Fuse.js with configurable threshold
-- Structured search filters: `is:pinned`, `is:audible`, `is:duplicate`, `domain:github.com`
-- 2D arrow-key grid navigation — Enter to switch, Backspace to close
-- Drag-to-reorder tabs within the grid
-- Multi-select via Ctrl+click and Shift+click for bulk close, group, or move operations
-- Tab group support — colored left-border stripe and name pill per group on each card
-- Automatic group suggestions bar — detects ungrouped domains with 2+ open tabs and
-  offers one-click grouping; also surfaces existing groups with live tab counts
-- Duplicate tab detection with DUP badge
-- Close all tabs from a domain in one command
-- Quick-switch between the two most recent tabs (double-tap Alt+Q)
-- Tab thumbnails captured via `captureVisibleTab` before the HUD opens, with LRU in-memory
-  cache (max 60 entries); falls back to favicon + domain-hashed accent color
+### Core Tab Management
+- Full-screen HUD overlay triggered by `Alt+Q` with blur backdrop and stagger animation
+- Most Recently Used (MRU) ordering tracked by a persistent background service worker
+- Fuzzy search across titles, URLs, and notes (Fuse.js, configurable threshold)
+- Structured filters: `is:pinned`, `is:audible`, `is:duplicate`, `domain:github.com`
+- 2D arrow-key grid navigation with Enter to switch, Backspace to close
+- Drag-to-reorder, multi-select (Ctrl+Click / Shift+Click), bulk operations
+- Tab group support with colored card stripes and automatic group suggestions
+- Duplicate detection, quick-switch (double-tap `Alt+Q`), tab thumbnails (LRU cache)
 
-### Right-Click Context Menu
-- Pin / Unpin tab
-- Duplicate tab (opens same URL in a new adjacent tab)
-- Move to new window
-- Reload tab
-- Close tab
-
-### Search Modes
-- Default: fuzzy search scoring title, URL, and attached notes
-- `ai: describe a page` — natural-language semantic search powered by Gemini embeddings
-  stored in Neon PostgreSQL with pgvector cosine similarity; searches both open tabs and
-  closed tabs from browsing history. Shows clear loading, error ("API offline"), and
-  empty-state feedback
-- `> command` — command palette for bulk operations
+### AI-Powered Semantic Search
+- Type `ai: describe what you're looking for` to search by meaning, not keywords
+- Gemini `gemini-embedding-001` generates 768-dimensional embeddings per tab
+- pgvector cosine similarity search over both open and historical tabs
+- Graceful fallback with loading, error, and empty-state feedback
 
 ### Workspaces
-- Name and save the current window's tabs as a named workspace
-- Restore a workspace — opens all saved URLs in a new window, filtered of restricted URLs
-- Update an existing workspace with the current tabs via the ↑ button
-- Delete workspaces — changes sync to Neon via REST API
-- Workspaces persist across sessions and devices under the authenticated user account
+- Save, restore, update, and delete named tab sets
+- Synced to cloud via REST API under authenticated user accounts
+- Filtered of restricted URLs on restore
 
-### Snooze
-- Snooze any tab for 30 min, 1 hr, 3 hrs, tomorrow, or next week
-- Snoozed tabs are removed from the browser; `chrome.alarms` schedules the wake event
-- Snoozed tab list shown in a collapsible section within the HUD
-
-### Recently Closed Tabs
-- 10 most recently closed tabs shown in a collapsible section
-- One-click restore via `chrome.sessions`
-
-### Notes
-- Attach a text note to any tab's URL via the command palette (`>note`)
-- Notes persist in `chrome.storage.local` and sync to cloud when signed in
-- Note preview overlaid on the tab card
-
-### Analytics
-- Passive visit tracking: every tab activation records URL, domain, title, and duration
-  to Neon PostgreSQL via a fire-and-forget API call
-- Top-sites bar in the HUD header shows most-visited domains with relative bar charts
-- Falls back to local frecency data (visit counts from `chrome.storage.local`) when the
-  API is offline, so analytics always shows something useful
-
-### Tab Suspender
-- Background alarm runs every 5 minutes, discards tabs inactive beyond a configurable
-  threshold (default 30 min) to reclaim memory
-- Skips pinned, active, and audible tabs
-
-### Authentication
-- AWS Cognito hosted UI — OAuth 2.0 Authorization Code flow with PKCE
-- Sign-in opens a popup window; the background service worker intercepts the callback
-  redirect and exchanges the authorization code via the backend (client secret never
-  leaves the server)
-- JWT validation uses `express-jwt` + `jwks-rsa` pulling Cognito's JWKS endpoint
-- Graceful fallback to a device UUID for unauthenticated / offline use
-
-### Command Palette
-- Activated by typing `>` in the search bar
-- Commands: close duplicates, group/ungroup selected tabs, cycle sort mode, toggle window
-  filter (all windows vs current), open settings, open keyboard cheat sheet
+### Additional Capabilities
+- **Snooze** — defer tabs for 30 min to 1 week; `chrome.alarms` handles wake events
+- **Notes** — attach text notes to any URL via the command palette
+- **Analytics** — passive visit tracking with top-sites bar chart in the HUD
+- **Tab Suspender** — auto-discard inactive tabs to reclaim memory (skips pinned/active/audible)
+- **Command Palette** — type `>` for bulk operations (close dupes, group tabs, cycle sort)
+- **Context Menu** — right-click for pin, duplicate, move-to-window, reload, close
+- **Recently Closed** — restore from the 10 most recent closed tabs
+- **Keyboard Cheat Sheet** — press `?` for a reference modal
 
 ---
 
@@ -97,45 +69,36 @@ serverless PostgreSQL + Gemini AI embeddings + AWS Cognito OAuth 2.0 + S3.
 
 ### Extension (`apps/extension/`)
 
-| Technology | Role |
+| Technology | Purpose |
 |---|---|
-| WXT 0.19 | Chrome extension framework — Manifest V3, shadow DOM mounting, HMR dev mode |
-| React 19 | Component library for the HUD overlay (injected via content script) |
-| TypeScript 5.6 | Full type safety across all extension code |
-| Tailwind CSS 3.4 | Utility-first styling scoped to the shadow DOM |
-| Fuse.js 7 | Client-side fuzzy search with weighted title/URL/notes scoring |
-| Chrome APIs | tabs, tabGroups, sessions, storage, alarms, identity, captureVisibleTab, windows |
+| **WXT 0.19** | Manifest V3 framework — shadow DOM mounting, HMR dev server |
+| **React 19** | HUD overlay UI (injected via content script) |
+| **TypeScript 5.6** | End-to-end type safety |
+| **Tailwind CSS 3.4** | Utility-first styling scoped to shadow DOM |
+| **Fuse.js 7** | Weighted fuzzy search (title, URL, notes) |
+| **Chrome APIs** | tabs, tabGroups, sessions, storage, alarms, identity, captureVisibleTab |
 
 ### API (`apps/api/`)
 
-| Technology | Role |
+| Technology | Purpose |
 |---|---|
-| Express.js 5 | HTTP server and routing |
-| TypeScript 5.7 | Full type safety across all API code |
-| Drizzle ORM | Type-safe SQL query builder and schema migrations |
-| postgres.js 3 | PostgreSQL driver with SSL (required for Neon serverless) |
-| Zod | Runtime request schema validation |
-| express-jwt + jwks-rsa | Cognito JWT verification via JWKS public key rotation |
+| **Express.js 5** | REST API server |
+| **TypeScript 5.7** | Shared type safety with the extension |
+| **Drizzle ORM** | Type-safe SQL queries and schema migrations |
+| **postgres.js 3** | PostgreSQL driver (SSL required for Neon serverless) |
+| **Zod** | Runtime request validation |
+| **express-jwt + jwks-rsa** | Cognito JWT verification via JWKS rotation |
 
-### Cloud Infrastructure
+### Infrastructure
 
-| Service | Role |
+| Service | Purpose |
 |---|---|
-| Neon (serverless PostgreSQL) | Primary database — workspaces, embeddings, analytics, notes, bookmarks |
-| pgvector | PostgreSQL extension for 768-dimensional cosine similarity search |
-| AWS Cognito | User pool, hosted login UI, OAuth 2.0 Authorization Code + PKCE |
-| AWS S3 | Tab screenshot storage with presigned URLs (per-user key namespacing) |
-| AWS App Runner | Containerized API deployment with auto-scaling |
-| Google Gemini API | `gemini-embedding-001` model — 768-dim tab title/URL embeddings |
-
-### Tooling
-
-| Tool | Role |
-|---|---|
-| pnpm workspaces | Monorepo dependency management across extension and API packages |
-| Vite 6 | Extension bundler (via WXT) |
-| PM2 | API process management and auto-restart in local development |
-| drizzle-kit | Schema push and database introspection |
+| **Neon** | Serverless PostgreSQL — workspaces, embeddings, analytics, notes |
+| **pgvector** | 768-dim cosine similarity index for semantic search |
+| **AWS Cognito** | OAuth 2.0 Authorization Code + PKCE |
+| **AWS S3** | Tab screenshot storage with presigned URLs |
+| **AWS App Runner** | Containerized API deployment with auto-scaling |
+| **Google Gemini** | Embedding model for semantic tab search |
 
 ---
 
@@ -146,197 +109,150 @@ tabflow/
 ├── apps/
 │   ├── extension/                  # Chrome extension (Manifest V3)
 │   │   ├── entrypoints/
-│   │   │   ├── background/         # Service worker: MRU tracking, thumbnail capture,
-│   │   │   │                       # analytics reporting, snooze alarms, tab embedding,
-│   │   │   │                       # message bus for all Chrome API calls
-│   │   │   ├── content/            # Content script: mounts HudOverlay into shadow DOM
-│   │   │   ├── options/            # Settings page (search threshold, suspend timeout, etc.)
+│   │   │   ├── background/         # Service worker — MRU tracking, thumbnail capture,
+│   │   │   │                       #   analytics, snooze alarms, tab embedding, message bus
+│   │   │   ├── content/            # Mounts HudOverlay into shadow DOM
+│   │   │   ├── options/            # Settings page
 │   │   │   └── popup/              # Toolbar popup
-│   │   ├── components/hud/         # 14 React components:
-│   │   │                           # HudOverlay, TabGrid, GridCard, BottomBar,
-│   │   │                           # WorkspaceSection, GroupSuggestions, AnalyticsBar,
-│   │   │                           # ContextMenu, CheatSheet, UndoToast, CommandPalette,
-│   │   │                           # RecentlyClosedSection, SnoozedSection, WindowStrip
+│   │   ├── components/hud/         # 14 React components (HudOverlay, TabGrid, GridCard,
+│   │   │                           #   BottomBar, ContextMenu, CommandPalette, etc.)
 │   │   └── lib/
 │   │       ├── hooks/              # useHudState, useTabActions, useKeyboardNav
-│   │       └── *.ts                # fuse-search, frecency, bookmarks, notes, snooze,
-│   │                               # api-client, auth (PKCE), settings, types, mru
-│   └── api/                        # Express.js REST API
+│   │       └── *.ts                # Search, frecency, bookmarks, notes, snooze,
+│   │                               #   API client, auth (PKCE), settings, types
+│   └── api/                        # Express.js v5 REST API
 │       └── src/
 │           ├── db/                 # Drizzle schema (7 tables) + Neon connection
-│           ├── routes/             # sync (workspaces/bookmarks/notes/settings),
-│           │                       # ai (embed + semantic search), analytics, thumbnails, auth
+│           ├── routes/             # sync, ai, analytics, thumbnails, auth
 │           ├── middleware/         # Cognito JWT auth with device-ID fallback
-│           └── services/           # S3 upload / presigned URL generation / deletion
-├── ecosystem.config.cjs            # PM2 process definition
-└── package.json                    # Root scripts
+│           └── services/           # S3 upload / presigned URLs / deletion
+└── .github/workflows/ci.yml       # Build + type-check CI pipeline
 ```
 
 ### Data Flow
 
 ```
-Alt+Q keypress
-  │
-  └─► Background service worker
-        ├── captureVisibleTab()  →  in-memory thumbnail cache (LRU, max 60)
-        ├── embedTab()           →  POST /api/ai/embed  →  Gemini  →  pgvector (Neon)
-        └── toggles HUD via message to content script
-              │
-              └─► Content script (shadow DOM)
-                    └─► HudOverlay (React)
-                          ├── fetchTabs()         →  background: get-tabs (MRU + live Chrome)
-                          ├── workspaces          →  GET  /api/sync/workspaces
-                          ├── ai: <query>         →  GET  /api/ai/history?q=  (pgvector)
-                          ├── analytics           →  GET  /api/analytics/top-domains
-                          └── visit tracking      →  POST /api/analytics/visit  (passive)
+Alt+Q
+ └─▸ Background service worker
+       ├── captureVisibleTab()  →  LRU thumbnail cache (max 60)
+       ├── embedTab()           →  POST /api/ai/embed  →  Gemini  →  pgvector
+       └── toggleHUD message    →  content script (shadow DOM)
+             └─▸ HudOverlay (React)
+                   ├── fetchTabs()     →  background: MRU + live Chrome tabs
+                   ├── workspaces      →  GET  /api/sync/workspaces
+                   ├── ai: <query>     →  GET  /api/ai/history?q=  (pgvector)
+                   ├── analytics       →  GET  /api/analytics/top-domains
+                   └── visit tracking  →  POST /api/analytics/visit
 ```
 
 ---
 
 ## Database Schema
 
-| Table | Purpose |
+| Table | Description |
 |---|---|
 | `users` | Cognito sub + email, created on first sign-in |
 | `workspaces` | Named tab sets (JSONB array of url/title/favicon) |
 | `bookmarks` | Cloud-synced bookmarks with favicon |
 | `notes` | Per-URL text notes |
-| `tab_embeddings` | 768-dim Gemini vectors for semantic search (real[]) |
-| `tab_analytics` | Per-URL visit count + total duration |
+| `tab_embeddings` | 768-dim Gemini vectors for semantic search |
+| `tab_analytics` | Per-URL visit count and total duration |
 | `user_settings` | JSONB settings blob, upserted on change |
 
 ---
 
-## API Reference
+## API Endpoints
 
-All endpoints require `Authorization: Bearer <cognito-token>` or `x-device-id` (UUID,
-generated automatically by the extension on first run).
+All endpoints require `Authorization: Bearer <cognito-token>` or `x-device-id` header.
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/health` | Health check — returns auth mode and service status |
-| POST | `/api/auth/token` | Exchange Cognito auth code for tokens (PKCE proxy) |
-| GET | `/api/sync/workspaces` | List user's saved workspaces |
-| POST | `/api/sync/workspaces` | Save a new workspace |
-| PATCH | `/api/sync/workspaces/:id` | Update workspace tabs |
-| DELETE | `/api/sync/workspaces/:id` | Delete a workspace |
-| POST | `/api/sync/bookmarks` | Sync a bookmark to cloud |
-| POST | `/api/sync/notes` | Sync a note to cloud |
-| PUT | `/api/sync/settings` | Upsert user settings |
-| POST | `/api/ai/embed` | Generate and store Gemini embedding for a URL |
-| GET | `/api/ai/history?q=` | Semantic search over stored embeddings |
-| POST | `/api/analytics/visit` | Record a tab visit with duration |
-| GET | `/api/analytics/top-domains` | Top domains by visit count and total time |
-| POST | `/api/thumbnails/upload` | Get presigned S3 URL for screenshot upload |
-| GET | `/api/thumbnails/:tabId` | Get presigned S3 URL for screenshot retrieval |
+| `GET` | `/health` | Service health check |
+| `POST` | `/api/auth/token` | Exchange Cognito auth code for tokens |
+| `GET` | `/api/sync/workspaces` | List saved workspaces |
+| `POST` | `/api/sync/workspaces` | Create workspace |
+| `PATCH` | `/api/sync/workspaces/:id` | Update workspace |
+| `DELETE` | `/api/sync/workspaces/:id` | Delete workspace |
+| `POST` | `/api/sync/bookmarks` | Sync bookmark |
+| `POST` | `/api/sync/notes` | Sync note |
+| `PUT` | `/api/sync/settings` | Upsert settings |
+| `POST` | `/api/ai/embed` | Generate + store embedding |
+| `GET` | `/api/ai/history?q=` | Semantic search over embeddings |
+| `POST` | `/api/analytics/visit` | Record tab visit |
+| `GET` | `/api/analytics/top-domains` | Top domains by visits/time |
+| `POST` | `/api/thumbnails/upload` | Presigned S3 upload URL |
+| `GET` | `/api/thumbnails/:tabId` | Presigned S3 download URL |
 
 ---
 
-## Setup
+## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (`npm install -g pnpm`)
+- pnpm 9+ (`npm install -g pnpm`)
 - Chrome or Chromium-based browser
-- Neon PostgreSQL database
-- (Optional) AWS account for Cognito, S3, App Runner
-- (Optional) Google Cloud project with Generative AI API enabled
+- Neon PostgreSQL database (free tier works)
+- (Optional) AWS account for Cognito + S3
+- (Optional) Google Cloud project with Gemini API enabled
 
-### 1. Install dependencies
+### Installation
 
 ```bash
+# Clone and install
+git clone https://github.com/danielzhao07/TabFlowV1.git
+cd TabFlowV1
 pnpm install
-```
 
-### 2. Configure the API
+# Configure API environment
+cp apps/api/.env.example apps/api/.env
+# Edit .env with your database URL, API keys, etc.
 
-Create `apps/api/.env`:
+# Push database schema
+cd apps/api && pnpm drizzle-kit push && cd ../..
 
-```env
-DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
-GEMINI_API_KEY=your_gemini_api_key
-
-# AWS (optional — required for auth and S3 thumbnails)
-AWS_REGION=us-east-2
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-S3_BUCKET_NAME=your_bucket
-COGNITO_USER_POOL_ID=us-east-2_xxxxx
-COGNITO_CLIENT_ID=your_client_id
-COGNITO_CLIENT_SECRET=your_client_secret
-COGNITO_DOMAIN=https://your-domain.auth.us-east-2.amazoncognito.com
-```
-
-### 3. Run database migrations
-
-```bash
-cd apps/api
-pnpm drizzle-kit push
-```
-
-### 4. Start the API
-
-```bash
-# Development (tsx watch)
-pnpm dev:api
-
-# Production (PM2, auto-restart)
-pnpm pm2:start
-```
-
-The API runs on `http://localhost:3001` by default.
-
-### 5. Build and load the extension
-
-```bash
+# Build the extension
 pnpm build
 ```
 
-In Chrome: `chrome://extensions` → Enable Developer mode → Load unpacked →
-select `apps/extension/.output/chrome-mv3`
+### Load in Chrome
 
----
+1. Navigate to `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** → select `apps/extension/.output/chrome-mv3`
 
-## Usage
-
-| Action | How |
-|---|---|
-| Open / close HUD | Alt+Q / Esc |
-| Navigate tabs | Arrow keys |
-| Switch to tab | Enter or click card |
-| Close tab | Backspace or X button on card |
-| Search tabs | Type in the bottom search bar |
-| Semantic AI search | Type `ai: describe what you're looking for` |
-| Command palette | Type `>` in the search bar |
-| Multi-select | Ctrl+click or Shift+click |
-| Quick-switch | Double-tap Alt+Q |
-| Save workspace | Click `+ Save current` in the Workspaces bar |
-| Update workspace | Click `↑` next to a saved workspace |
-| Restore workspace | Click the workspace card |
-| Auto-group suggestion | Click a domain pill in the Groups bar |
-| Cheat sheet | Press `?` while HUD is open |
-
----
-
-## Development
+### Development
 
 ```bash
-# Extension dev server (HMR)
+# Extension dev server with HMR
 pnpm dev
 
 # API dev server (tsx watch)
 pnpm dev:api
 
-# Build extension for production
-pnpm build
-
-# Package as .zip for submission
-pnpm zip
-
-# PM2 process management
-pnpm pm2:start
-pnpm pm2:logs
-pnpm pm2:status
-pnpm pm2:stop
+# Run both concurrently
+pnpm dev:all
 ```
+
+---
+
+## Usage
+
+| Action | Shortcut |
+|---|---|
+| Open / close HUD | `Alt+Q` / `Esc` |
+| Navigate grid | Arrow keys |
+| Switch to tab | `Enter` or click |
+| Close tab | `Backspace` or `X` |
+| Search | Type in bottom search bar |
+| AI search | `ai: your query` |
+| Command palette | `>` prefix |
+| Multi-select | `Ctrl+Click` / `Shift+Click` |
+| Quick-switch | Double-tap `Alt+Q` |
+| Cheat sheet | `?` |
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

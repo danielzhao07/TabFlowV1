@@ -5,3 +5,10 @@ dist/
 *.log
 .env
 .env.local
+
+# AI/editor tool configs
+.claude/
+.cursor/
+.copilot/
+.aider*
+.codeium/
