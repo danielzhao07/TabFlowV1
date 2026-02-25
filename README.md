@@ -5,7 +5,7 @@ intelligent, keyboard-driven HUD backed by a cloud API. Tabs are navigated throu
 full-screen overlay inspired by Windows Alt+Tab, with fuzzy search, semantic AI search,
 cloud-synced workspaces, and passive browsing analytics.
 
-Built as a full-stack personal project — Chrome extension (Manifest V3) communicating with
+Built as a full-stack personal project - Chrome extension (Manifest V3) communicating with
 a REST API deployed on AWS App Runner, with Neon serverless PostgreSQL, Gemini AI embeddings,
 AWS Cognito authentication, and S3 thumbnail storage.
 
