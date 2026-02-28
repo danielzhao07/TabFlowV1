@@ -59,9 +59,12 @@ export function HudOverlay() {
   const openUrls = new Set(s.tabs.map((t) => t.url));
   const historyOnly = historyResults.filter((r) => !openUrls.has(r.url));
 
-  // Compute cols: must match TabGrid's internal formula for keyboard nav to be in sync
+  // Compute cols: must match TabGrid's internal formula exactly for keyboard nav to be in sync
   const N = s.displayTabs.length;
-  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N)))));
+  const COLS_LOOKUP = [0, 1, 2, 3, 2, 3, 3, 4, 4, 3, 5, 4, 4];
+  const cols = Math.max(1, Math.min(N, N <= 12
+    ? (COLS_LOOKUP[N] ?? Math.ceil(Math.sqrt(N)))
+    : Math.min(6, Math.ceil(Math.sqrt(N)))));
 
   const panelRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {

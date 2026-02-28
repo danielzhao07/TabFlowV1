@@ -70,9 +70,14 @@ export function TabGrid({
   const gap = 8;
   const headerRowH = 26; // height of each group header row including its gap
 
-  // Dynamic column/row count based on available space and tab count
-  // Cap at N so a single tab doesn't get placed in a 2-col grid (causing left-align)
-  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N)))));
+  // Lookup for balanced grids: minimises near-empty last rows
+  //   N:   1  2  3  4  5  6  7  8  9 10 11 12
+  //   cols:1  2  3  2  3  3  4  4  3  5  4  4
+  // (4→2x2, 5→3+2, 7→4+3 not 3+3+1, 8→4+4 not 3+3+2, 10→5+5 etc.)
+  const COLS_LOOKUP = [0, 1, 2, 3, 2, 3, 3, 4, 4, 3, 5, 4, 4];
+  const cols = Math.max(1, Math.min(N, N <= 12
+    ? (COLS_LOOKUP[N] ?? Math.ceil(Math.sqrt(N)))
+    : Math.min(6, Math.ceil(Math.sqrt(N)))));
   const rows = Math.ceil(N / cols);
 
   // How many group header rows will render (named groups only, not "Other")
@@ -175,7 +180,7 @@ export function TabGrid({
                 <div
                   key={tab.tabId}
                   className="group"
-                  style={{ width: cardW, height: cardH, flexShrink: 0 }}
+                  style={{ width: cardW, height: cardH, flexShrink: 0, transition: 'width 180ms ease, height 180ms ease' }}
                   draggable
                   onDragStart={() => { dragFromRef.current = fi; }}
                   onDragEnd={() => { dragFromRef.current = null; }}
