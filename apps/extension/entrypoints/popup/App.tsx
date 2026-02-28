@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { TabInfo } from '@/lib/types';
-import { getWorkspaces, saveWorkspace, restoreWorkspace, deleteWorkspace, type Workspace } from '@/lib/workspaces';
+import { getWorkspaces, saveWorkspace, deleteWorkspace, type Workspace } from '@/lib/workspaces';
 
 function getDomain(url: string): string {
   try { return new URL(url).hostname.replace('www.', ''); }
@@ -57,7 +57,12 @@ export function App() {
   };
 
   const handleRestoreWorkspace = async (id: string) => {
-    await restoreWorkspace(id);
+    const ws = workspaces.find((w) => w.id === id);
+    if (!ws) return;
+    const urls = ws.tabs.map((t) => t.url).filter(Boolean);
+    if (urls.length > 0) {
+      chrome.runtime.sendMessage({ type: 'restore-workspace', urls, groups: ws.tabs });
+    }
     window.close();
   };
 

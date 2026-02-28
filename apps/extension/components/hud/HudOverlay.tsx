@@ -303,7 +303,7 @@ export function HudOverlay() {
               return next;
             })}
           />
-          <WorkspaceSection tabs={s.displayTabs} />
+          <WorkspaceSection tabs={s.displayTabs} onRestore={s.hide} />
 
           <WindowStrip
             windows={s.otherWindows}

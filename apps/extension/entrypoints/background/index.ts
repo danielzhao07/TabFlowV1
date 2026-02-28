@@ -552,10 +552,44 @@ export default defineBackground(() => {
       return true;
     }
 
-    // Workspace restore — open all tabs in a new window
+    // Workspace restore — open all tabs in the current window then recreate groups
     if (message.type === 'restore-workspace') {
-      chrome.windows.create({ url: message.urls });
-      sendResponse({ success: true });
+      (async () => {
+        try {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          const windowId = activeTab?.windowId;
+          const tabDefs: { url: string; groupTitle?: string; groupColor?: string }[] = message.groups || message.urls.map((u: string) => ({ url: u }));
+
+          // Create all tabs
+          const createdTabs = await Promise.all(
+            tabDefs.map((t: { url: string }) => chrome.tabs.create({ url: t.url, windowId, active: false }))
+          );
+
+          // Group tabs by groupTitle+groupColor
+          const groupMap = new Map<string, { color: string; tabIds: number[] }>();
+          for (let i = 0; i < tabDefs.length; i++) {
+            const def = tabDefs[i];
+            const tab = createdTabs[i];
+            if (def.groupTitle && def.groupColor && tab?.id) {
+              const key = `${def.groupTitle}::${def.groupColor}`;
+              const existing = groupMap.get(key);
+              if (existing) existing.tabIds.push(tab.id);
+              else groupMap.set(key, { color: def.groupColor, tabIds: [tab.id] });
+            }
+          }
+
+          // Create tab groups
+          for (const [key, { color, tabIds }] of groupMap) {
+            const title = key.split('::')[0];
+            const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
+            await chrome.tabGroups.update(groupId, {
+              title,
+              color: color as chrome.tabGroups.ColorEnum,
+            }).catch(() => {});
+          }
+        } catch { /* ignore */ }
+        sendResponse({ success: true });
+      })();
       return true;
     }
 

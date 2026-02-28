@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 
 export interface ContextMenuItem {
   label: string;
-  icon?: React.ReactNode;
   action: () => void;
   danger?: boolean;
   divider?: boolean;
@@ -20,8 +19,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
+      if (menuRef.current) {
+        // composedPath() is required in shadow DOM — e.target retargets to shadow host
+        const path = e.composedPath();
+        if (!path.includes(menuRef.current as EventTarget)) {
+          onClose();
+        }
       }
     };
     const keyHandler = (e: KeyboardEvent) => {
@@ -50,28 +53,29 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed rounded-xl border border-white/[0.12] py-1 min-w-[180px] overflow-hidden"
+      className="fixed py-1 min-w-[160px] overflow-hidden"
       style={{
         left: x,
         top: y,
         zIndex: 2147483647,
-        background: 'rgba(20, 20, 40, 0.97)',
-        backdropFilter: 'blur(16px)',
-        boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+        background: 'rgba(22, 22, 36, 0.98)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        borderRadius: 10,
+        backdropFilter: 'blur(20px)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset',
       }}
     >
       {items.map((item, i) => (
         <div key={i}>
-          {item.divider && <div className="my-1 h-px bg-white/[0.08]" />}
+          {item.divider && <div className="my-1 mx-2 h-px" style={{ background: 'rgba(255,255,255,0.07)' }} />}
           <button
             onClick={() => { item.action(); onClose(); }}
-            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-[12px] transition-colors ${
+            className={`w-full px-3.5 py-1.5 text-left text-[12px] transition-colors ${
               item.danger
-                ? 'text-red-400/80 hover:bg-red-400/10 hover:text-red-400'
-                : 'text-white/70 hover:bg-white/[0.08] hover:text-white/90'
+                ? 'text-red-400/75 hover:bg-red-500/12 hover:text-red-400'
+                : 'text-white/65 hover:bg-white/[0.07] hover:text-white/90'
             }`}
           >
-            {item.icon && <span className="w-4 h-4 shrink-0 flex items-center justify-center opacity-60">{item.icon}</span>}
             {item.label}
           </button>
         </div>
