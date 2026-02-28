@@ -3,9 +3,9 @@ import type { TabInfo } from '@/lib/types';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 
 const GROUP_COLORS: Record<string, string> = {
-  blue: '#3b82f6', cyan: '#06b6d4', green: '#22c55e', yellow: '#eab308',
-  orange: '#f97316', red: '#ef4444', pink: '#ec4899', purple: '#a855f7',
-  grey: '#6b7280',
+  blue: '#8ab4f8', cyan: '#78d9ec', green: '#81c995', yellow: '#fdd663',
+  orange: '#fcad70', red: '#f28b82', pink: '#ff8bcb', purple: '#c58af9',
+  grey: '#9aa0a6',
 };
 
 interface GridCardProps {
@@ -135,14 +135,6 @@ export function GridCard({
           className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
           style={{ background: 'rgba(0,0,0,0.45)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
         >
-          {/* Group indicator */}
-          {groupColor && (
-            <div
-              className="w-1 self-stretch rounded-sm shrink-0 mr-0.5"
-              style={{ backgroundColor: groupColor }}
-            />
-          )}
-
           {/* Favicon */}
           {tab.faviconUrl && !faviconError ? (
             <img
@@ -164,16 +156,6 @@ export function GridCard({
           <span className="flex-1 text-[12px] text-white/80 truncate font-medium leading-none">
             {tab.title || domain}
           </span>
-
-          {/* Group name pill */}
-          {tab.groupTitle && groupColor && (
-            <span
-              className="text-[9px] px-1 py-0.5 rounded shrink-0 font-medium"
-              style={{ backgroundColor: groupColor + '30', color: groupColor }}
-            >
-              {tab.groupTitle}
-            </span>
-          )}
 
           {/* Status icons */}
           {tab.isPinned && <span className="text-[10px] text-amber-400/60 shrink-0">📌</span>}

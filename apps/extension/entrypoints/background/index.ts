@@ -167,6 +167,22 @@ export default defineBackground(() => {
     broadcastSpecific({ type: 'tab-removed', tabId });
   });
 
+  // Live group name/color changes — update all affected tabs in MRU and notify HUD
+  chrome.tabGroups.onUpdated.addListener(async (group) => {
+    const list = await getMRUList();
+    let changed = false;
+    for (const tab of list) {
+      if (tab.groupId === group.id) {
+        await updateTab(tab.tabId, {
+          groupTitle: group.title || '',
+          groupColor: group.color,
+        });
+        changed = true;
+      }
+    }
+    if (changed) broadcastUpdate();
+  });
+
   // Track new tabs — trigger full refetch in HUD
   chrome.tabs.onCreated.addListener(async (tab) => {
     if (tab.id) {
@@ -197,8 +213,9 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'get-tabs') {
       const senderWindowId = sender.tab?.windowId;
-      Promise.all([getMRUList(), chrome.tabs.query({})]).then(([mruTabs, chromeTabs]) => {
-        // Merge live Chrome data into MRU list to fix stale "New Tab" titles
+      (async () => {
+        const [mruTabs, chromeTabs] = await Promise.all([getMRUList(), chrome.tabs.query({})]);
+        // Merge live Chrome data: title, url, favicon
         const liveMap = new Map(chromeTabs.map((t) => [t.id!, t]));
         for (const tab of mruTabs) {
           const live = liveMap.get(tab.tabId);
@@ -208,8 +225,25 @@ export default defineBackground(() => {
             if (live.favIconUrl) tab.faviconUrl = live.favIconUrl;
           }
         }
+        // Always refresh live group name/color so renames are instant without needing a reload
+        const groupIds = [...new Set(mruTabs.map((t) => t.groupId).filter(Boolean))] as number[];
+        if (groupIds.length > 0) {
+          const results = await Promise.allSettled(groupIds.map((gid) => chrome.tabGroups.get(gid)));
+          const groupInfoMap = new Map<number, { title: string; color: string }>();
+          results.forEach((r, i) => {
+            if (r.status === 'fulfilled') {
+              groupInfoMap.set(groupIds[i], { title: r.value.title || '', color: r.value.color });
+            }
+          });
+          for (const tab of mruTabs) {
+            if (tab.groupId) {
+              const info = groupInfoMap.get(tab.groupId);
+              if (info) { tab.groupTitle = info.title; tab.groupColor = info.color; }
+            }
+          }
+        }
         sendResponse({ tabs: mruTabs, currentWindowId: senderWindowId });
-      });
+      })();
       return true; // async response
     }
 

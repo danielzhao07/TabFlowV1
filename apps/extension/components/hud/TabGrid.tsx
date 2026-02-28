@@ -3,10 +3,11 @@ import type { TabInfo } from '@/lib/types';
 import { GridCard } from './GridCard';
 import type { TabActions } from '@/lib/hooks/useTabActions';
 
+// Chrome's actual muted/pastel group colors
 const GROUP_COLORS: Record<string, string> = {
-  blue: '#3b82f6', cyan: '#06b6d4', green: '#22c55e', yellow: '#eab308',
-  orange: '#f97316', red: '#ef4444', pink: '#ec4899', purple: '#a855f7',
-  grey: '#6b7280',
+  blue: '#8ab4f8', cyan: '#78d9ec', green: '#81c995', yellow: '#fdd663',
+  orange: '#fcad70', red: '#f28b82', pink: '#ff8bcb', purple: '#c58af9',
+  grey: '#9aa0a6',
 };
 
 interface TabGridProps {
@@ -21,6 +22,8 @@ interface TabGridProps {
   thumbnails?: Map<number, string>;
 }
 
+const FOLDER_TAB_H = 20; // height of the label that sticks up above the group outline
+
 export function TabGrid({
   tabs, selectedIndex, selectedTabs, bookmarkedUrls, duplicateUrls,
   notesMap, actions, thumbnails,
@@ -34,9 +37,7 @@ export function TabGrid({
     if (!el) return;
     const ro = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (entry) {
-        setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
-      }
+      if (entry) setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -53,7 +54,7 @@ export function TabGrid({
     );
   }
 
-  // Sort tabs: grouped by groupId (ascending), then ungrouped last; preserve order within each group
+  // Sort: grouped tabs first (by group order), ungrouped last
   const grouped = tabs.filter((t) => t.groupId);
   const ungrouped = tabs.filter((t) => !t.groupId);
   const groupOrder: number[] = [];
@@ -68,154 +69,213 @@ export function TabGrid({
   const N = sortedTabs.length;
   const pad = 16;
   const gap = 8;
-  const headerRowH = 26; // height of each group header row including its gap
 
-  // Lookup for balanced grids: minimises near-empty last rows
-  //   N:   1  2  3  4  5  6  7  8  9 10 11 12
-  //   cols:1  2  3  2  3  3  4  4  3  5  4  4
-  // (4→2x2, 5→3+2, 7→4+3 not 3+3+1, 8→4+4 not 3+3+2, 10→5+5 etc.)
+  // Balanced cols lookup
   const COLS_LOOKUP = [0, 1, 2, 3, 2, 3, 3, 4, 4, 3, 5, 4, 4];
   const cols = Math.max(1, Math.min(N, N <= 12
     ? (COLS_LOOKUP[N] ?? Math.ceil(Math.sqrt(N)))
     : Math.min(6, Math.ceil(Math.sqrt(N)))));
   const rows = Math.ceil(N / cols);
 
-  // How many group header rows will render (named groups only, not "Other")
-  const numHeaders = groupOrder.length;
+  const cardW = Math.min(300, Math.max(130, Math.floor(
+    (containerSize.w - pad * 2 - gap * (cols - 1)) / cols
+  )));
 
-  const cardW = Math.min(300, Math.max(130, Math.floor((containerSize.w - pad * 2 - gap * (cols - 1)) / cols)));
-  const availH = containerSize.h - pad * 2 - numHeaders * headerRowH - gap * (rows - 1);
+  // Count rows that will need extra top space for folder tab labels
+  // (any row that contains the first occurrence of a group)
+  // We'll compute this properly during the segmenting pass below.
+  // First pass: figure out how many rows have group-first segments
+  let groupFirstRowCount = 0;
+  {
+    const seen = new Set<number>();
+    for (let r = 0; r < rows; r++) {
+      const start = r * cols;
+      const rowCards = sortedTabs.slice(start, start + cols);
+      let hasFirst = false;
+      let i = 0;
+      while (i < rowCards.length) {
+        const gid = rowCards[i].groupId;
+        if (gid && !seen.has(gid)) { seen.add(gid); hasFirst = true; }
+        i++;
+      }
+      if (hasFirst) groupFirstRowCount++;
+    }
+  }
+
+  const availH = containerSize.h - pad * 2
+    - groupFirstRowCount * FOLDER_TAB_H  // extra space above rows with first group appearances
+    - (rows - 1) * gap;
   const maxCardH = rows > 0 ? Math.floor(availH / rows) : 120;
-  // Use 16:9 aspect ratio to match typical browser viewport — prevents letterboxing on screenshots
   const cardH = Math.max(80, Math.min(maxCardH, Math.floor(cardW * 9 / 16)));
 
-  const hasGroups = sortedTabs.some((t) => t.groupId);
-
-  // Build render items: group header rows + card items
-  type RenderItem =
-    | { kind: 'header'; groupId: number; title: string; color: string }
-    | { kind: 'card'; tab: TabInfo; flatIndex: number };
-
-  const renderItems: RenderItem[] = [];
-  let flatIndex = 0;
-  let lastGroupId: number | undefined = undefined;
-
-  for (const tab of sortedTabs) {
-    if (hasGroups && tab.groupId && tab.groupId !== lastGroupId) {
-      lastGroupId = tab.groupId;
-      renderItems.push({
-        kind: 'header',
-        groupId: tab.groupId,
-        title: tab.groupTitle || String(tab.groupId),
-        color: tab.groupColor ? (GROUP_COLORS[tab.groupColor] ?? '#6b7280') : '#6b7280',
-      });
-    } else if (tab.groupId !== lastGroupId) {
-      lastGroupId = tab.groupId;
-    }
-    renderItems.push({ kind: 'card', tab, flatIndex });
-    flatIndex++;
+  // Segment each row into runs of same-group / ungrouped cards
+  interface Segment {
+    cards: Array<{ tab: TabInfo; flatIndex: number }>;
+    groupId?: number;
+    color?: string;
+    title?: string;
+    isFirstRow: boolean; // first time this group appears in the grid
   }
 
-  // Convert renderItems into display rows so the last partial row is centered.
-  // Each entry is either a full-width group header or a row of card items.
-  type DisplayRow =
-    | { kind: 'header'; groupId: number; title: string; color: string }
-    | { kind: 'cards'; items: Array<{ tab: TabInfo; flatIndex: number }> };
+  const seenGroups = new Set<number>();
 
-  const displayRows: DisplayRow[] = [];
-  let cardBatch: Array<{ tab: TabInfo; flatIndex: number }> = [];
-
-  const flushBatch = () => {
-    for (let i = 0; i < cardBatch.length; i += cols) {
-      displayRows.push({ kind: 'cards', items: cardBatch.slice(i, i + cols) });
-    }
-    cardBatch = [];
-  };
-
-  for (const item of renderItems) {
-    if (item.kind === 'header') {
-      flushBatch();
-      displayRows.push(item);
-    } else {
-      cardBatch.push({ tab: item.tab, flatIndex: item.flatIndex });
-    }
+  interface RowData {
+    segments: Segment[];
+    hasGroupFirst: boolean;
   }
-  flushBatch();
 
-  const rowWidth = cols * cardW + (cols - 1) * gap;
+  const rowData: RowData[] = [];
+
+  for (let r = 0; r < rows; r++) {
+    const start = r * cols;
+    const rowCards = sortedTabs.slice(start, start + cols).map((tab, j) => ({
+      tab,
+      flatIndex: start + j,
+    }));
+
+    const segments: Segment[] = [];
+    let i = 0;
+    while (i < rowCards.length) {
+      const card = rowCards[i];
+      const gid = card.tab.groupId;
+      if (gid) {
+        let j = i;
+        while (j < rowCards.length && rowCards[j].tab.groupId === gid) j++;
+        const isFirstRow = !seenGroups.has(gid);
+        if (isFirstRow) seenGroups.add(gid);
+        segments.push({
+          cards: rowCards.slice(i, j),
+          groupId: gid,
+          color: card.tab.groupColor ? (GROUP_COLORS[card.tab.groupColor] ?? '#6b7280') : '#6b7280',
+          title: card.tab.groupTitle || '',
+          isFirstRow,
+        });
+        i = j;
+      } else {
+        segments.push({ cards: [card], isFirstRow: false });
+        i++;
+      }
+    }
+
+    rowData.push({
+      segments,
+      hasGroupFirst: segments.some((s) => s.isFirstRow),
+    });
+  }
+
+  // Reusable card renderer
+  const renderCard = ({ tab, flatIndex: fi }: { tab: TabInfo; flatIndex: number }) => (
+    <div
+      key={tab.tabId}
+      className="group"
+      style={{ width: cardW, height: cardH, flexShrink: 0, transition: 'width 180ms ease, height 180ms ease' }}
+      draggable
+      onDragStart={() => { dragFromRef.current = fi; }}
+      onDragEnd={() => { dragFromRef.current = null; }}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (dragFromRef.current !== null && dragFromRef.current !== fi) {
+          actions.reorderTabs(dragFromRef.current, fi);
+        }
+        dragFromRef.current = null;
+      }}
+    >
+      <GridCard
+        tab={tab}
+        index={fi}
+        isSelected={fi === selectedIndex}
+        isMultiSelected={selectedTabs.has(tab.tabId)}
+        isBookmarked={bookmarkedUrls.has(tab.url)}
+        isDuplicate={duplicateUrls.has(tab.url)}
+        note={notesMap.get(tab.url)}
+        thumbnail={thumbnails?.get(tab.tabId)}
+        onSwitch={actions.switchToTab}
+        onClose={actions.closeTab}
+        onTogglePin={actions.togglePin}
+        onToggleSelect={actions.toggleSelect}
+        onDuplicate={actions.duplicateTab}
+        onMoveToNewWindow={actions.moveToNewWindow}
+        onReload={actions.reloadTab}
+        animDelay={Math.min(fi * 12, 120)}
+      />
+    </div>
+  );
 
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-hidden flex items-center justify-center"
-      style={{ padding: pad }}
+      className="w-full h-full flex items-center justify-center"
+      style={{ padding: pad, overflow: 'visible' }}
     >
-      {/* Flex column: each row is a centered flex row — last partial row centers automatically */}
       <div style={{ display: 'flex', flexDirection: 'column', gap, alignItems: 'center' }}>
-        {displayRows.map((row, rowIdx) => {
-          if (row.kind === 'header') {
-            return (
-              <div
-                key={`header-${row.groupId}`}
-                style={{
-                  width: rowWidth,
-                  height: 22,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: row.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 10, color: row.color, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {row.title}
-                </span>
-                <div style={{ flex: 1, height: 1, backgroundColor: row.color + '30' }} />
-              </div>
-            );
-          }
+        {rowData.map(({ segments, hasGroupFirst }, rowIdx) => (
+          <div
+            key={rowIdx}
+            style={{
+              display: 'flex',
+              gap,
+              // Extra top margin so folder tab labels have room above the row
+              marginTop: hasGroupFirst ? FOLDER_TAB_H : 0,
+            }}
+          >
+            {segments.map((seg, sIdx) => {
+              if (!seg.groupId) {
+                // Ungrouped cards — render directly
+                return seg.cards.map(renderCard);
+              }
 
-          return (
-            <div key={rowIdx} style={{ display: 'flex', gap }}>
-              {row.items.map(({ tab, flatIndex: fi }) => (
+              const color = seg.color!;
+              return (
                 <div
-                  key={tab.tabId}
-                  className="group"
-                  style={{ width: cardW, height: cardH, flexShrink: 0, transition: 'width 180ms ease, height 180ms ease' }}
-                  draggable
-                  onDragStart={() => { dragFromRef.current = fi; }}
-                  onDragEnd={() => { dragFromRef.current = null; }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    if (dragFromRef.current !== null && dragFromRef.current !== fi) {
-                      actions.reorderTabs(dragFromRef.current, fi);
-                    }
-                    dragFromRef.current = null;
+                  key={`${seg.groupId}-${rowIdx}-${sIdx}`}
+                  style={{
+                    display: 'flex',
+                    gap,
+                    position: 'relative',
+                    // Outline doesn't affect layout (no extra space consumed)
+                    boxShadow: `0 0 0 2px ${color}`,
+                    borderRadius: 8,
+                    // Brighter tinted background
+                    background: `linear-gradient(135deg, ${color}38 0%, ${color}22 100%)`,
+                    backgroundColor: color + '2e',
                   }}
                 >
-                  <GridCard
-                    tab={tab}
-                    index={fi}
-                    isSelected={fi === selectedIndex}
-                    isMultiSelected={selectedTabs.has(tab.tabId)}
-                    isBookmarked={bookmarkedUrls.has(tab.url)}
-                    isDuplicate={duplicateUrls.has(tab.url)}
-                    note={notesMap.get(tab.url)}
-                    thumbnail={thumbnails?.get(tab.tabId)}
-                    onSwitch={actions.switchToTab}
-                    onClose={actions.closeTab}
-                    onTogglePin={actions.togglePin}
-                    onToggleSelect={actions.toggleSelect}
-                    onDuplicate={actions.duplicateTab}
-                    onMoveToNewWindow={actions.moveToNewWindow}
-                    onReload={actions.reloadTab}
-                    animDelay={Math.min(fi * 12, 120)}
-                  />
+                  {/* Folder tab label — sticks up above the outline */}
+                  {seg.isFirstRow && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: -2,
+                      height: FOLDER_TAB_H + 1, // +1 so bottom edge merges with the box-shadow border
+                      paddingLeft: 14,
+                      paddingRight: 10,
+                      paddingTop: 4,
+                      paddingBottom: 6,
+                      background: `linear-gradient(to bottom, ${color}50, ${color}38)`,
+                      border: `2px solid ${color}`,
+                      borderBottom: 'none',
+                      borderRadius: '6px 6px 0 0',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color,
+                      letterSpacing: '0.07em',
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                    }}>
+                      {seg.title || 'Group'}
+                    </div>
+                  )}
+
+                  {seg.cards.map(renderCard)}
                 </div>
-              ))}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
