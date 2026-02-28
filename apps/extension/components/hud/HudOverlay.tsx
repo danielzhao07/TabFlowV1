@@ -291,7 +291,18 @@ export function HudOverlay() {
 
         {/* Bottom section: workspaces + search — pinned to bottom */}
         <div className="shrink-0">
-          <GroupSuggestions tabs={s.tabs} actions={a} />
+          <GroupSuggestions
+            tabs={s.tabs}
+            actions={a}
+            selectedTabs={s.selectedTabs}
+            groupFilter={s.groupFilter}
+            onGroupFilterToggle={(gid) => s.setGroupFilter((prev) => {
+              const next = new Set(prev);
+              if (next.has(gid)) next.delete(gid);
+              else next.add(gid);
+              return next;
+            })}
+          />
           <WorkspaceSection tabs={s.displayTabs} />
 
           <WindowStrip

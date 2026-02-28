@@ -69,6 +69,10 @@ export interface HudState {
   undoToast: { message: string } | null;
   setUndoToast: Dispatch<SetStateAction<{ message: string } | null>>;
 
+  // Group filter (click a group pill to show only that group)
+  groupFilter: Set<number>;
+  setGroupFilter: Dispatch<SetStateAction<Set<number>>>;
+
   // Context menu
   contextMenu: { x: number; y: number; tabId: number } | null;
   setContextMenu: Dispatch<SetStateAction<{ x: number; y: number; tabId: number } | null>>;
@@ -110,6 +114,7 @@ export function useHudState(): HudState {
   const [otherWindows, setOtherWindows] = useState<OtherWindow[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: number } | null>(null);
   const [thumbnails, setThumbnails] = useState<Map<number, string>>(new Map());
+  const [groupFilter, setGroupFilter] = useState<Set<number>>(new Set());
   const lastToggleRef = useRef<number>(0);
 
   const hide = useCallback(() => {
@@ -123,6 +128,7 @@ export function useHudState(): HudState {
       setQuery('');
       setSelectedIndex(0);
       setSelectedTabs(new Set());
+      setGroupFilter(new Set());
     }, 150);
   }, []);
 
@@ -194,9 +200,13 @@ export function useHudState(): HudState {
     ? sortedTabs
     : searchTabs(sortedTabs, query, settings?.searchThreshold, notesMap.size > 0 ? notesMap : undefined, duplicateUrls);
 
-  const displayTabs = settings?.maxResults
-    ? filteredTabs.slice(0, settings.maxResults)
+  const groupFilteredTabs = groupFilter.size > 0
+    ? filteredTabs.filter((t) => t.groupId != null && groupFilter.has(t.groupId))
     : filteredTabs;
+
+  const displayTabs = settings?.maxResults
+    ? groupFilteredTabs.slice(0, settings.maxResults)
+    : groupFilteredTabs;
 
   return {
     visible, setVisible, animatingIn, setAnimatingIn, lastToggleRef, hide,
@@ -212,6 +222,7 @@ export function useHudState(): HudState {
     notesMap, setNotesMap,
     showCheatSheet, setShowCheatSheet,
     undoToast, setUndoToast,
+    groupFilter, setGroupFilter,
     contextMenu, setContextMenu,
     thumbnails, setThumbnails,
     displayTabs, duplicateMap, duplicateUrls, duplicateCount,

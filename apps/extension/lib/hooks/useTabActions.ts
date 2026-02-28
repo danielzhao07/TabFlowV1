@@ -11,6 +11,7 @@ export interface TabActions {
   closeDuplicates: () => void;
   groupSelectedTabs: () => Promise<void>;
   ungroupSelectedTabs: () => Promise<void>;
+  dissolveGroup: (groupId: number) => Promise<void>;
   toggleBookmark: (tabId: number) => Promise<void>;
   saveNote: (tabId: number, url: string, note: string) => Promise<void>;
   snoozeTab: (tabId: number, durationMs: number) => Promise<void>;
@@ -129,6 +130,14 @@ export function useTabActions(s: HudState): TabActions {
     s.fetchTabs();
   }, [s]);
 
+  const dissolveGroup = useCallback(async (groupId: number) => {
+    const tabIds = s.tabs.filter((t) => t.groupId === groupId).map((t) => t.tabId);
+    if (tabIds.length === 0) return;
+    await chrome.runtime.sendMessage({ type: 'ungroup-tabs', payload: { tabIds } });
+    s.setGroupFilter((prev) => { const next = new Set(prev); next.delete(groupId); return next; });
+    s.fetchTabs();
+  }, [s]);
+
   const toggleBookmark = useCallback(async (tabId: number) => {
     const tab = s.tabs.find((t) => t.tabId === tabId);
     if (!tab) return;
@@ -232,7 +241,7 @@ export function useTabActions(s: HudState): TabActions {
 
   return {
     switchToTab, closeTab, togglePin, toggleSelect, closeSelectedTabs, closeDuplicates,
-    groupSelectedTabs, ungroupSelectedTabs, toggleBookmark, saveNote, snoozeTab,
+    groupSelectedTabs, ungroupSelectedTabs, dissolveGroup, toggleBookmark, saveNote, snoozeTab,
     moveToWindow, reorderTabs, toggleMute, closeByDomain, groupSuggestionTabs,
     restoreSession, reopenLastClosed, selectAll, duplicateTab, moveToNewWindow, reloadTab,
   };

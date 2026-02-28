@@ -22,7 +22,7 @@ interface TabGridProps {
   thumbnails?: Map<number, string>;
 }
 
-const FOLDER_TAB_H = 20; // height of the label that sticks up above the group outline
+const FOLDER_TAB_H = 26; // height of the label that sticks up above the group outline
 
 export function TabGrid({
   tabs, selectedIndex, selectedTabs, bookmarkedUrls, duplicateUrls,
@@ -163,12 +163,17 @@ export function TabGrid({
     });
   }
 
-  // Reusable card renderer
-  const renderCard = ({ tab, flatIndex: fi }: { tab: TabInfo; flatIndex: number }) => (
+  // Reusable card renderer; groupColor applies a per-card colored outline
+  const renderCard = ({ tab, flatIndex: fi }: { tab: TabInfo; flatIndex: number }, groupColor?: string) => (
     <div
       key={tab.tabId}
       className="group"
-      style={{ width: cardW, height: cardH, flexShrink: 0, transition: 'width 180ms ease, height 180ms ease' }}
+      style={{
+        width: cardW, height: cardH, flexShrink: 0,
+        transition: 'width 180ms ease, height 180ms ease',
+        borderRadius: 10,
+        boxShadow: groupColor ? `0 0 0 1.5px ${groupColor}99` : undefined,
+      }}
       draggable
       onDragStart={() => { dragFromRef.current = fi; }}
       onDragEnd={() => { dragFromRef.current = null; }}
@@ -233,12 +238,12 @@ export function TabGrid({
                     display: 'flex',
                     gap,
                     position: 'relative',
-                    // Outline doesn't affect layout (no extra space consumed)
-                    boxShadow: `0 0 0 2px ${color}`,
+                    // Dimmed outline — pastel color at 60% opacity
+                    boxShadow: `0 0 0 1.5px ${color}99`,
                     borderRadius: 8,
-                    // Brighter tinted background
-                    background: `linear-gradient(135deg, ${color}38 0%, ${color}22 100%)`,
-                    backgroundColor: color + '2e',
+                    // Tinted background
+                    background: `linear-gradient(135deg, ${color}30 0%, ${color}1a 100%)`,
+                    backgroundColor: color + '26',
                   }}
                 >
                   {/* Folder tab label — sticks up above the outline */}
@@ -246,14 +251,12 @@ export function TabGrid({
                     <div style={{
                       position: 'absolute',
                       bottom: '100%',
-                      left: -2,
+                      left: 12,
                       height: FOLDER_TAB_H + 1, // +1 so bottom edge merges with the box-shadow border
-                      paddingLeft: 14,
-                      paddingRight: 10,
-                      paddingTop: 4,
-                      paddingBottom: 6,
-                      background: `linear-gradient(to bottom, ${color}50, ${color}38)`,
-                      border: `2px solid ${color}`,
+                      paddingLeft: 20,
+                      paddingRight: 12,
+                      background: `linear-gradient(to bottom, ${color}48, ${color}30)`,
+                      border: `1.5px solid ${color}99`,
                       borderBottom: 'none',
                       borderRadius: '6px 6px 0 0',
                       fontSize: 10,
@@ -264,13 +267,13 @@ export function TabGrid({
                       whiteSpace: 'nowrap',
                       lineHeight: 1,
                       display: 'flex',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                     }}>
                       {seg.title || 'Group'}
                     </div>
                   )}
 
-                  {seg.cards.map(renderCard)}
+                  {seg.cards.map((c) => renderCard(c, color))}
                 </div>
               );
             })}
