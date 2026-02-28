@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/Express-5-000000?logo=express&logoColor=white" alt="Express 5" />
   <img src="https://img.shields.io/badge/PostgreSQL-Neon-4169E1?logo=postgresql&logoColor=white" alt="Neon PostgreSQL" />
   <img src="https://github.com/danielzhao07/TabFlowV1/actions/workflows/ci.yml/badge.svg" alt="CI" />
-  <img src="https://img.shields.io/github/license/danielzhao07/TabFlowV1" alt="License" />
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" />
   <img src="https://img.shields.io/github/last-commit/danielzhao07/TabFlowV1?color=green" alt="Last Commit" />
 </p>
 
