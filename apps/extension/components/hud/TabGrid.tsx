@@ -227,7 +227,7 @@ export function TabGrid({
             {segments.map((seg, sIdx) => {
               if (!seg.groupId) {
                 // Ungrouped cards — render directly
-                return seg.cards.map(renderCard);
+                return seg.cards.map((c) => renderCard(c));
               }
 
               const color = seg.color!;
