@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useHudState, loadHudData } from '@/lib/hooks/useHudState';
 import { useTabActions } from '@/lib/hooks/useTabActions';
 import { useKeyboardNav } from '@/lib/hooks/useKeyboardNav';
+import { saveSettings } from '@/lib/settings';
+import type { TabFlowSettings } from '@/lib/settings';
 import { TabGrid } from './TabGrid';
 import { BottomBar } from './BottomBar';
 import { WindowStrip } from './WindowStrip';
@@ -11,6 +13,7 @@ import { CheatSheet } from './CheatSheet';
 import { UndoToast } from './UndoToast';
 import { CommandPalette, useCommands } from './CommandPalette';
 import { GroupSuggestions } from './GroupSuggestions';
+import { SettingsPanel } from './SettingsPanel';
 import { searchHistory, checkHealth, type HistoryResult } from '@/lib/api-client';
 import { getStoredTokens, type TokenSet } from '@/lib/auth';
 
@@ -20,10 +23,10 @@ export function HudOverlay() {
   const [historyResults, setHistoryResults] = useState<HistoryResult[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(false);
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [authUser, setAuthUser] = useState<TokenSet | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Detect ai: prefix in query
   const isAiMode = s.query.startsWith('ai:');
@@ -56,8 +59,8 @@ export function HudOverlay() {
   const openUrls = new Set(s.tabs.map((t) => t.url));
   const historyOnly = historyResults.filter((r) => !openUrls.has(r.url));
 
-  // Compute cols: prefer fewer, larger columns — matches Windows Task View feel
-  const cols = Math.max(1, Math.min(5, Math.ceil(Math.sqrt(s.displayTabs.length))));
+  // Compute cols: must match TabGrid's internal formula for keyboard nav to be in sync
+  const cols = Math.max(1, Math.min(6, Math.ceil(Math.sqrt(s.displayTabs.length * 1.4))));
 
   const panelRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -96,7 +99,7 @@ export function HudOverlay() {
                 ));
               }
             }).catch(() => {});
-            checkHealth().then(setBackendOnline);
+            checkHealth().catch(() => {});
             getStoredTokens().then(setAuthUser);
             return true;
           }
@@ -133,18 +136,28 @@ export function HudOverlay() {
     openCheatSheet: () => s.setShowCheatSheet(true),
   });
 
+  const handleSettingChange = useCallback(async (patch: Partial<TabFlowSettings>) => {
+    const updated = await saveSettings(patch);
+    s.setSettings(updated);
+  }, [s]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!s.visible) return null;
 
   return (
     <div
-      className="fixed inset-0 flex flex-col items-center justify-center"
+      className="fixed inset-0 flex flex-col"
       style={{
         zIndex: 2147483647,
-        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0)',
-        backdropFilter: s.animatingIn ? 'blur(24px) saturate(180%)' : 'blur(0px)',
+        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0)',
+        backdropFilter: s.animatingIn ? 'blur(28px) saturate(180%)' : 'blur(0px)',
         transition: 'background-color 180ms ease-out, backdrop-filter 180ms ease-out',
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) s.hide(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          setShowSettings(false);
+          s.hide();
+        }
+      }}
     >
       <div
         ref={panelRef}
@@ -155,131 +168,110 @@ export function HudOverlay() {
           transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         }}
       >
-        {/* Centered card container */}
-        <div className="flex-1 flex items-center justify-center min-h-0 px-8 py-6">
-          <div
-            className="flex flex-col rounded-2xl overflow-hidden"
+        {/* Floating gear button — top-right */}
+        <div className="absolute top-4 right-4" style={{ zIndex: 2147483646 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowSettings((p) => !p); }}
+            className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
             style={{
-              background: 'rgba(18, 18, 30, 0.82)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
-              maxWidth: 1300,
-              maxHeight: '75vh',
-              width: '100%',
+              background: showSettings ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              color: showSettings ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.35)',
             }}
-            onClick={(e) => e.stopPropagation()}
+            title="Settings"
           >
-            {/* Minimal header inside the container */}
-            <div className="flex items-center gap-3 px-4 py-2 shrink-0"
-              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <span className="text-[11px] font-medium text-white/30 tracking-wider uppercase">TabFlow</span>
-              <span className="text-[11px] text-white/15">{s.displayTabs.length} tabs</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
 
-              <div className="flex-1 flex justify-center">
-                <AnalyticsBar />
-              </div>
+        {/* Settings panel */}
+        {showSettings && (
+          <SettingsPanel
+            authUser={authUser}
+            authLoading={authLoading}
+            authError={authError}
+            onSignIn={async () => {
+              setAuthLoading(true);
+              setAuthError(null);
+              try {
+                const res = await chrome.runtime.sendMessage({ type: 'sign-in' });
+                if (res?.success) {
+                  setAuthUser(res.tokenSet);
+                } else {
+                  setAuthError(res?.error || 'Sign-in failed');
+                }
+              } catch (e: any) {
+                setAuthError(e?.message || 'Sign-in failed');
+              } finally {
+                setAuthLoading(false);
+              }
+            }}
+            onSignOut={async () => {
+              await chrome.runtime.sendMessage({ type: 'sign-out' });
+              setAuthUser(null);
+            }}
+            settings={s.settings}
+            onSettingChange={handleSettingChange}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
 
-              {/* Auth */}
-              {authUser ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-white/25">{authUser.email}</span>
-                  <button
-                    onClick={async () => {
-                      await chrome.runtime.sendMessage({ type: 'sign-out' });
-                      setAuthUser(null);
-                    }}
-                    className="text-[10px] text-white/20 hover:text-white/50 transition-colors"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  {authError && (
-                    <span className="text-[9px] text-red-400/60 max-w-[140px] truncate" title={authError}>
-                      {authError}
-                    </span>
-                  )}
-                  <button
-                    onClick={async () => {
-                      setAuthLoading(true);
-                      setAuthError(null);
-                      try {
-                        const res = await chrome.runtime.sendMessage({ type: 'sign-in' });
-                        if (res?.success) {
-                          setAuthUser(res.tokenSet);
-                        } else {
-                          setAuthError(res?.error || 'Sign-in failed');
-                        }
-                      } catch (e: any) {
-                        setAuthError(e?.message || 'Sign-in failed');
-                      } finally {
-                        setAuthLoading(false);
-                      }
-                    }}
-                    disabled={authLoading}
-                    className="text-[10px] px-2 py-0.5 rounded border border-white/10 text-white/30 hover:bg-white/[0.06] hover:text-white/50 disabled:opacity-40 transition-colors"
-                  >
-                    {authLoading ? '...' : 'Sign in'}
-                  </button>
-                </div>
-              )}
+        {/* Tab grid — floats directly on backdrop */}
+        <div className="flex-1 min-h-0 overflow-hidden px-6 pt-4 pb-2">
+          {s.isCommandMode ? (
+            <CommandPalette
+              query={s.commandQuery}
+              commands={commands}
+              onClose={() => s.setQuery('')}
+            />
+          ) : (
+            <TabGrid
+              tabs={s.displayTabs}
+              selectedIndex={s.selectedIndex}
+              selectedTabs={s.selectedTabs}
+              bookmarkedUrls={s.bookmarkedUrls}
+              duplicateUrls={s.duplicateUrls}
+              notesMap={s.notesMap}
+              actions={a}
+              cols={cols}
+              thumbnails={s.thumbnails}
+            />
+          )}
+        </div>
+
+        {/* AI history results (closed tabs from Neon) */}
+        {isAiMode && aiQuery && (
+          <div
+            className="px-6 py-2 shrink-0 mx-6 mb-1 rounded-xl"
+            style={{ background: 'rgba(18,18,30,0.75)', border: '1px solid rgba(255,255,255,0.06)' }}
+          >
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] text-white/30 uppercase tracking-wider">
+                {aiLoading ? 'Searching history…' : aiError ? 'API offline — start the API server to enable semantic search' : historyOnly.length > 0 ? `History (${historyOnly.length})` : 'No history found — browse more to build your search index'}
+              </span>
             </div>
-
-            {/* Tab grid */}
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {s.isCommandMode ? (
-                <CommandPalette
-                  query={s.commandQuery}
-                  commands={commands}
-                  onClose={() => s.setQuery('')}
-                />
-              ) : (
-                <TabGrid
-                  tabs={s.displayTabs}
-                  selectedIndex={s.selectedIndex}
-                  selectedTabs={s.selectedTabs}
-                  bookmarkedUrls={s.bookmarkedUrls}
-                  duplicateUrls={s.duplicateUrls}
-                  notesMap={s.notesMap}
-                  actions={a}
-                  cols={cols}
-                  thumbnails={s.thumbnails}
-                />
-              )}
-            </div>
-
-            {/* AI history results (closed tabs from Neon) */}
-            {isAiMode && aiQuery && (
-              <div
-                className="px-3 py-2 shrink-0"
-                style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                    {aiLoading ? 'Searching history...' : aiError ? 'API offline — start the API server to enable semantic search' : historyOnly.length > 0 ? `History (${historyOnly.length})` : 'No history found — browse more to build your search index'}
-                  </span>
-                </div>
-                {!aiLoading && !aiError && historyOnly.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {historyOnly.slice(0, 6).map((r) => (
-                      <button
-                        key={r.url}
-                        onClick={() => chrome.tabs.create({ url: r.url })}
-                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
-                        title={r.url}
-                      >
-                        <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
-                        <span className="text-[9px] text-white/20 shrink-0">reopen</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+            {!aiLoading && !aiError && historyOnly.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {historyOnly.slice(0, 6).map((r) => (
+                  <button
+                    key={r.url}
+                    onClick={() => chrome.tabs.create({ url: r.url })}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
+                    title={r.url}
+                  >
+                    <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
+                    <span className="text-[9px] text-white/20 shrink-0">reopen</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
-        </div>
+        )}
 
         {/* Bottom section: workspaces + search — pinned to bottom */}
         <div className="shrink-0">

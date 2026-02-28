@@ -194,6 +194,7 @@ export function useTabActions(s: HudState): TabActions {
 
   const groupSuggestionTabs = useCallback(async (tabIds: number[], domain: string) => {
     await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: domain.split('.')[0] || domain } });
+    await new Promise<void>((r) => setTimeout(r, 150));
     s.fetchTabs();
   }, [s]);
 

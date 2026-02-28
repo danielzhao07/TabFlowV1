@@ -9,6 +9,7 @@ export interface TabFlowSettings {
   autoSuspend: boolean; // auto-discard inactive tabs
   autoSuspendMinutes: number; // minutes of inactivity before discarding
   gridColumns: number; // 0 = auto (responsive), otherwise fixed column count
+  hideTodayTabs: boolean; // hide tabs last accessed today
 }
 
 const SETTINGS_KEY = 'tabflow_settings';
@@ -22,6 +23,7 @@ const DEFAULT_SETTINGS: TabFlowSettings = {
   autoSuspend: false,
   autoSuspendMinutes: 30,
   gridColumns: 0,
+  hideTodayTabs: false,
 };
 
 export async function getSettings(): Promise<TabFlowSettings> {

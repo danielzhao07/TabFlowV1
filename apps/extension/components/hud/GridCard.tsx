@@ -95,10 +95,10 @@ export function GridCard({
   ];
 
   const borderColor = isSelected
-    ? 'rgba(255,255,255,0.7)'
+    ? 'rgba(255,255,255,0.6)'
     : isMultiSelected
-    ? 'rgba(255,255,255,0.35)'
-    : 'rgba(255,255,255,0.06)';
+    ? 'rgba(255,255,255,0.28)'
+    : 'rgba(255,255,255,0.05)';
 
   return (
     <>
@@ -111,7 +111,7 @@ export function GridCard({
           animationFillMode: 'both',
           animationTimingFunction: 'cubic-bezier(0.16,1,0.3,1)',
           background: 'rgba(15,15,28,0.92)',
-          border: `1.5px solid ${borderColor}`,
+          border: `1px solid ${borderColor}`,
           boxShadow: isSelected
             ? `0 0 0 1px rgba(255,255,255,0.15), 0 8px 32px rgba(0,0,0,0.5)`
             : '0 2px 12px rgba(0,0,0,0.3)',
@@ -120,7 +120,7 @@ export function GridCard({
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.03)';
+          (e.currentTarget as HTMLDivElement).style.transform = 'scale(1.02)';
           if (!isSelected && !isMultiSelected) {
             (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.18)';
           }

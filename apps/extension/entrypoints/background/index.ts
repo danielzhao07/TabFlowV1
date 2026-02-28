@@ -231,6 +231,17 @@ export default defineBackground(() => {
           const groupId = await chrome.tabs.group({ tabIds });
           if (title) await chrome.tabGroups.update(groupId, { title, color: color || 'cyan' });
           else await chrome.tabGroups.update(groupId, { color: color || 'cyan' });
+          // Explicitly update MRU for each tab so groupId is visible immediately when fetchTabs runs
+          try {
+            const group = await chrome.tabGroups.get(groupId);
+            for (const tabId of tabIds) {
+              await updateTab(tabId, {
+                groupId,
+                groupTitle: group.title || '',
+                groupColor: group.color,
+              });
+            }
+          } catch { /* group info update best-effort */ }
           broadcastUpdate();
           sendResponse({ success: true, groupId });
         } catch {
