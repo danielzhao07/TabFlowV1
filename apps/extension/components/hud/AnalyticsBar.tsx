@@ -7,6 +7,7 @@ interface LocalDomainStat { domain: string; visits: number; }
 
 interface AnalyticsBarProps {
   tabs?: TabInfo[];
+  onSwitch?: () => void;
 }
 
 function getDomain(url: string): string {
@@ -20,7 +21,13 @@ function titleForDomain(domain: string, tabs: TabInfo[]): string {
   return match?.title || domain;
 }
 
-export function AnalyticsBar({ tabs = [] }: AnalyticsBarProps) {
+function findTabForDomain(domain: string, tabs: TabInfo[]): TabInfo | undefined {
+  return tabs.find((t) => {
+    try { return new URL(t.url).hostname.replace('www.', '') === domain; } catch { return false; }
+  });
+}
+
+export function AnalyticsBar({ tabs = [], onSwitch }: AnalyticsBarProps) {
   const [domains, setDomains] = useState<DomainStat[]>([]);
   const [localDomains, setLocalDomains] = useState<LocalDomainStat[]>([]);
 
@@ -56,7 +63,22 @@ export function AnalyticsBar({ tabs = [] }: AnalyticsBarProps) {
       {items.map((item, i) => (
         <span key={item.key} className="flex items-center gap-2 shrink-0">
           {i > 0 && <span className="text-white/10 text-[9px]">·</span>}
-          <span className="text-[10px] text-white/35 truncate max-w-[160px]">{item.label}</span>
+          <button
+            className="text-[10px] text-white/35 truncate max-w-[160px] hover:text-white/65 transition-colors cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0 }}
+            onClick={() => {
+              const match = findTabForDomain(item.key, tabs);
+              if (match) {
+                chrome.tabs.update(match.tabId, { active: true });
+                chrome.windows.update(match.windowId, { focused: true });
+              } else {
+                chrome.tabs.create({ url: 'https://' + item.key });
+              }
+              onSwitch?.();
+            }}
+          >
+            {item.label}
+          </button>
         </span>
       ))}
     </div>

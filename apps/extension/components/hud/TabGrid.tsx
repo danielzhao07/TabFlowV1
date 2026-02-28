@@ -72,7 +72,7 @@ export function TabGrid({
 
   // Dynamic column/row count based on available space and tab count
   // Cap at N so a single tab doesn't get placed in a 2-col grid (causing left-align)
-  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N * 1.4)))));
+  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N)))));
   const rows = Math.ceil(N / cols);
 
   // How many group header rows will render (named groups only, not "Other")

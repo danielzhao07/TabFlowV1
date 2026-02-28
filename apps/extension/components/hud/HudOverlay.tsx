@@ -61,7 +61,7 @@ export function HudOverlay() {
 
   // Compute cols: must match TabGrid's internal formula for keyboard nav to be in sync
   const N = s.displayTabs.length;
-  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N * 1.4)))));
+  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N)))));
 
   const panelRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -178,7 +178,7 @@ export function HudOverlay() {
           >
             {s.displayTabs.length}
           </span>
-          {!s.settings?.hideTodayTabs && <AnalyticsBar tabs={s.tabs} />}
+          {!s.settings?.hideTodayTabs && <AnalyticsBar tabs={s.tabs} onSwitch={s.hide} />}
         </div>
 
         {/* Floating gear button — top-right */}
