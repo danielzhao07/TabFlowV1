@@ -203,11 +203,56 @@ export default defineBackground(() => {
     }
   });
 
+  // Tab attached to a window (cross-window drag, move-to-window)
+  // Fires in the NEW window — ensure tab is in MRU with correct windowId and notify all HUDs.
+  // Use pushToFront so the tab is added if it was never tracked (e.g. from another window session),
+  // and updateTab as a fallback to patch windowId without changing MRU order if it already exists.
+  chrome.tabs.onAttached.addListener(async (tabId, { newWindowId }) => {
+    const list = await getMRUList();
+    const exists = list.some((t) => t.tabId === tabId);
+    if (exists) {
+      await updateTab(tabId, { windowId: newWindowId }).catch(() => {});
+    } else {
+      await pushToFront(tabId, newWindowId).catch(() => {});
+    }
+    broadcastUpdate();
+  });
+
+  // Tab detached from a window (first half of a cross-window drag)
+  // The HUD will reconcile on the next broadcastUpdate / poll cycle
+  chrome.tabs.onDetached.addListener(() => {
+    broadcastUpdate();
+  });
+
+  // Tab reordered within a window — keeps HUD grid order in sync
+  chrome.tabs.onMoved.addListener(() => {
+    broadcastUpdate();
+  });
+
   // Handle keyboard shortcut
   chrome.commands.onCommand.addListener(async (command) => {
     if (command === 'toggle-hud') {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (activeTab?.id && canSendMessage(activeTab.url)) {
+
+      // If the active tab is a restricted page (new tab, chrome://, etc.),
+      // switch to the most-recently-used real tab first, then show the HUD there.
+      if (!canSendMessage(activeTab?.url)) {
+        const mruList = await getMRUList();
+        const realTab = mruList.find((t) => canSendMessage(t.url));
+        if (!realTab) return;
+        await chrome.tabs.update(realTab.tabId, { active: true }).catch(() => {});
+        await chrome.windows.update(realTab.windowId, { focused: true }).catch(() => {});
+        // Brief pause so Chrome has time to activate the tab before we send the message
+        setTimeout(() => {
+          hudVisible = true;
+          chrome.tabs.sendMessage(realTab.tabId, { type: 'toggle-hud' }).catch(() => {
+            hudVisible = false;
+          });
+        }, 120);
+        return;
+      }
+
+      if (activeTab?.id) {
         // Capture BEFORE showing HUD so we get the actual page, not the overlay
         if (!hudVisible) {
           await captureThumbnail(activeTab.id, activeTab.windowId!);
@@ -227,18 +272,52 @@ export default defineBackground(() => {
       const senderWindowId = sender.tab?.windowId;
       (async () => {
         const [mruTabs, chromeTabs] = await Promise.all([getMRUList(), chrome.tabs.query({})]);
-        // Merge live Chrome data: title, url, favicon
+        // Build live map — this is the definitive set of open tabs
         const liveMap = new Map(chromeTabs.map((t) => [t.id!, t]));
-        for (const tab of mruTabs) {
+
+        // Drop any MRU entries for tabs that Chrome no longer has open
+        const staleMruIds = mruTabs.filter((t) => !liveMap.has(t.tabId)).map((t) => t.tabId);
+        if (staleMruIds.length > 0) {
+          // Clean up in background, don't await
+          Promise.all(staleMruIds.map((id) => removeTab(id))).catch(() => {});
+        }
+        const aliveTabs = mruTabs.filter((t) => liveMap.has(t.tabId));
+
+        // Merge live Chrome data: always trust Chrome for windowId and groupId.
+        // windowId catches cross-window drags before MRU is updated.
+        // groupId catches newly restored workspace tabs that haven't had their onUpdated fire yet.
+        for (const tab of aliveTabs) {
           const live = liveMap.get(tab.tabId);
           if (live) {
+            if (live.windowId) tab.windowId = live.windowId;
+            if (live.groupId !== undefined) tab.groupId = live.groupId !== -1 ? live.groupId : undefined;
             if (live.title && live.title !== 'New Tab') tab.title = live.title;
             if (live.url) tab.url = live.url;
             if (live.favIconUrl) tab.faviconUrl = live.favIconUrl;
           }
         }
+
+        // Tabs that exist in Chrome but are missing from MRU — add them at the end
+        const mruIds = new Set(aliveTabs.map((t) => t.tabId));
+        for (const chromeTab of chromeTabs) {
+          if (chromeTab.id && !mruIds.has(chromeTab.id)) {
+            aliveTabs.push({
+              tabId: chromeTab.id,
+              windowId: chromeTab.windowId,
+              title: chromeTab.title || '',
+              url: chromeTab.url || '',
+              faviconUrl: chromeTab.favIconUrl || '',
+              lastAccessed: chromeTab.lastAccessed ?? 0,
+              isActive: chromeTab.active,
+              isPinned: chromeTab.pinned,
+              isAudible: chromeTab.audible ?? false,
+              isDiscarded: chromeTab.discarded ?? false,
+            });
+          }
+        }
+
         // Always refresh live group name/color so renames are instant without needing a reload
-        const groupIds = [...new Set(mruTabs.map((t) => t.groupId).filter(Boolean))] as number[];
+        const groupIds = [...new Set(aliveTabs.map((t) => t.groupId).filter(Boolean))] as number[];
         if (groupIds.length > 0) {
           const results = await Promise.allSettled(groupIds.map((gid) => chrome.tabGroups.get(gid)));
           const groupInfoMap = new Map<number, { title: string; color: string }>();
@@ -247,14 +326,14 @@ export default defineBackground(() => {
               groupInfoMap.set(groupIds[i], { title: r.value.title || '', color: r.value.color });
             }
           });
-          for (const tab of mruTabs) {
+          for (const tab of aliveTabs) {
             if (tab.groupId) {
               const info = groupInfoMap.get(tab.groupId);
               if (info) { tab.groupTitle = info.title; tab.groupColor = info.color; }
             }
           }
         }
-        sendResponse({ tabs: mruTabs, currentWindowId: senderWindowId });
+        sendResponse({ tabs: aliveTabs, currentWindowId: senderWindowId });
       })();
       return true; // async response
     }
@@ -552,33 +631,42 @@ export default defineBackground(() => {
       return true;
     }
 
-    // Workspace restore — open all tabs in the current window then recreate groups
+    // Workspace restore — open all tabs in a new window and recreate groups
     if (message.type === 'restore-workspace') {
       (async () => {
         try {
-          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          const windowId = activeTab?.windowId;
-          const tabDefs: { url: string; groupTitle?: string; groupColor?: string }[] = message.groups || message.urls.map((u: string) => ({ url: u }));
+          const tabDefs: { url: string; groupTitle?: string; groupColor?: string }[] =
+            message.groups || message.urls.map((u: string) => ({ url: u }));
+          const urls = tabDefs.map((t) => t.url).filter(Boolean);
+          if (urls.length === 0) { sendResponse({ success: false }); return; }
 
-          // Create all tabs
-          const createdTabs = await Promise.all(
-            tabDefs.map((t: { url: string }) => chrome.tabs.create({ url: t.url, windowId, active: false }))
-          );
+          // Create new window with the first URL; remaining tabs added after
+          const newWindow = await chrome.windows.create({ url: urls[0], focused: true });
+          const windowId = newWindow.id!;
+          const firstTabId = newWindow.tabs?.[0]?.id;
+
+          // Create remaining tabs in the new window
+          const createdTabIds: (number | undefined)[] = [firstTabId];
+          for (let i = 1; i < urls.length; i++) {
+            const t = await chrome.tabs.create({ url: urls[i], windowId, active: false });
+            createdTabIds.push(t.id);
+          }
 
           // Group tabs by groupTitle+groupColor
           const groupMap = new Map<string, { color: string; tabIds: number[] }>();
           for (let i = 0; i < tabDefs.length; i++) {
             const def = tabDefs[i];
-            const tab = createdTabs[i];
-            if (def.groupTitle && def.groupColor && tab?.id) {
+            const tabId = createdTabIds[i];
+            if (def.groupTitle && def.groupColor && tabId) {
               const key = `${def.groupTitle}::${def.groupColor}`;
               const existing = groupMap.get(key);
-              if (existing) existing.tabIds.push(tab.id);
-              else groupMap.set(key, { color: def.groupColor, tabIds: [tab.id] });
+              if (existing) existing.tabIds.push(tabId);
+              else groupMap.set(key, { color: def.groupColor, tabIds: [tabId] });
             }
           }
 
-          // Create tab groups
+          // Recreate tab groups in the new window, then update MRU immediately so the
+          // HUD shows group names on first open without waiting for onUpdated propagation.
           for (const [key, { color, tabIds }] of groupMap) {
             const title = key.split('::')[0];
             const groupId = await chrome.tabs.group({ tabIds, createProperties: { windowId } });
@@ -586,7 +674,15 @@ export default defineBackground(() => {
               title,
               color: color as chrome.tabGroups.ColorEnum,
             }).catch(() => {});
+            // Eagerly write group info to MRU so fetchTabs returns correct names immediately
+            for (const tabId of tabIds) {
+              if (tabId) {
+                await updateTab(tabId, { groupId, groupTitle: title, groupColor: color }).catch(() => {});
+              }
+            }
           }
+          // One final broadcast after everything is fully set up
+          broadcastUpdate();
         } catch { /* ignore */ }
         sendResponse({ success: true });
       })();

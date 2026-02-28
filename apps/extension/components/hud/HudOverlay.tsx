@@ -78,6 +78,14 @@ export function HudOverlay() {
     s.setSelectedIndex(0);
   }, [s.query]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Poll tab list every 750ms while HUD is visible — catches external closes/creates
+  // that may not reach the content-script message listener (e.g. chrome:// tab constraints)
+  useEffect(() => {
+    if (!s.visible) return;
+    const interval = setInterval(() => { s.fetchTabs(); }, 750);
+    return () => clearInterval(interval);
+  }, [s.visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Listen for messages from background
   useEffect(() => {
     const listener = (message: { type: string; tabId?: number }) => {
@@ -292,7 +300,9 @@ export function HudOverlay() {
         {/* Bottom section: workspaces + search — pinned to bottom */}
         <div className="shrink-0">
           <GroupSuggestions
-            tabs={s.tabs}
+            tabs={s.windowFilter === 'current' && s.currentWindowId
+              ? s.tabs.filter((t) => t.windowId === s.currentWindowId)
+              : s.tabs}
             actions={a}
             selectedTabs={s.selectedTabs}
             groupFilter={s.groupFilter}

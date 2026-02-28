@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TabInfo } from '@/lib/types';
-import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { ContextMenu, MenuIcons, type ContextMenuItem } from './ContextMenu';
 
 const GROUP_COLORS: Record<string, string> = {
   blue: '#8ab4f8', cyan: '#78d9ec', green: '#81c995', yellow: '#fdd663',
@@ -17,6 +17,7 @@ interface GridCardProps {
   isDuplicate: boolean;
   note?: string;
   thumbnail?: string;
+  selectedTabsCount: number;
   onSwitch: (tabId: number) => void;
   onClose: (tabId: number) => void;
   onTogglePin: (tabId: number, pinned: boolean) => void;
@@ -24,6 +25,8 @@ interface GridCardProps {
   onDuplicate: (tabId: number) => void;
   onMoveToNewWindow: (tabId: number) => void;
   onReload: (tabId: number) => void;
+  onCloseSelected: () => void;
+  onGroupSelected: () => void;
   animDelay?: number;
 }
 
@@ -37,10 +40,13 @@ function domainColor(domain: string): string {
   return `hsl(${Math.abs(hash) % 360}, 50%, 55%)`;
 }
 
+// Re-use icon set from ContextMenu so they match exactly
+const { Pin: IcoPin, Copy: IcoDuplicate, Window: IcoWindow, Reload: IcoReload, X: IcoClose, Grid: IcoGroup } = MenuIcons;
+
 export function GridCard({
   tab, index, isSelected, isMultiSelected, isBookmarked, isDuplicate, note, thumbnail,
-  onSwitch, onClose, onTogglePin, onToggleSelect,
-  onDuplicate, onMoveToNewWindow, onReload, animDelay = 0,
+  selectedTabsCount, onSwitch, onClose, onTogglePin, onToggleSelect,
+  onDuplicate, onMoveToNewWindow, onReload, onCloseSelected, onGroupSelected, animDelay = 0,
 }: GridCardProps) {
   const [faviconError, setFaviconError] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -48,6 +54,9 @@ export function GridCard({
   const domain = getDomain(tab.url);
   const color = domainColor(domain);
   const groupColor = tab.groupColor ? (GROUP_COLORS[tab.groupColor] ?? '#6b7280') : null;
+
+  // Whether this card is part of an active multi-selection
+  const isInMultiSelect = isMultiSelected && selectedTabsCount > 1;
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -64,30 +73,54 @@ export function GridCard({
     }
   };
 
-  const contextItems: ContextMenuItem[] = [
+  // Multi-select context menu
+  const multiContextItems: ContextMenuItem[] = [
+    {
+      label: `Group ${selectedTabsCount} tabs`,
+      icon: <IcoGroup />,
+      action: onGroupSelected,
+    },
+    {
+      label: `Close ${selectedTabsCount} tabs`,
+      icon: <IcoClose />,
+      action: onCloseSelected,
+      danger: true,
+      divider: true,
+    },
+  ];
+
+  // Single-tab context menu
+  const singleContextItems: ContextMenuItem[] = [
     {
       label: tab.isPinned ? 'Unpin tab' : 'Pin tab',
+      icon: <IcoPin />,
       action: () => onTogglePin(tab.tabId, !tab.isPinned),
     },
     {
       label: 'Duplicate tab',
+      icon: <IcoDuplicate />,
       action: () => onDuplicate(tab.tabId),
     },
     {
       label: 'Move to new window',
+      icon: <IcoWindow />,
       action: () => onMoveToNewWindow(tab.tabId),
     },
     {
       label: 'Reload tab',
+      icon: <IcoReload />,
       action: () => onReload(tab.tabId),
     },
     {
       label: 'Close tab',
+      icon: <IcoClose />,
       action: () => onClose(tab.tabId),
       danger: true,
       divider: true,
     },
   ];
+
+  const contextItems = isInMultiSelect ? multiContextItems : singleContextItems;
 
   const borderColor = isSelected
     ? 'rgba(255,255,255,0.6)'
@@ -125,7 +158,7 @@ export function GridCard({
           (e.currentTarget as HTMLDivElement).style.borderColor = borderColor;
         }}
       >
-        {/* Title bar at top — matches Windows Task View style */}
+        {/* Title bar at top */}
         <div
           className="flex items-center gap-1.5 px-2.5 py-1.5 shrink-0"
           style={{ background: 'rgba(0,0,0,0.45)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
@@ -168,7 +201,7 @@ export function GridCard({
           </button>
         </div>
 
-        {/* Screenshot / Fallback — fills remaining card height */}
+        {/* Screenshot / Fallback */}
         <div className="flex-1 relative overflow-hidden min-h-0">
           {thumbnail ? (
             <img

@@ -195,6 +195,7 @@ export function TabGrid({
         isDuplicate={duplicateUrls.has(tab.url)}
         note={notesMap.get(tab.url)}
         thumbnail={thumbnails?.get(tab.tabId)}
+        selectedTabsCount={selectedTabs.size}
         onSwitch={actions.switchToTab}
         onClose={actions.closeTab}
         onTogglePin={actions.togglePin}
@@ -202,6 +203,8 @@ export function TabGrid({
         onDuplicate={actions.duplicateTab}
         onMoveToNewWindow={actions.moveToNewWindow}
         onReload={actions.reloadTab}
+        onCloseSelected={actions.closeSelectedTabs}
+        onGroupSelected={actions.groupSelectedTabs}
         animDelay={Math.min(fi * 12, 120)}
       />
     </div>
