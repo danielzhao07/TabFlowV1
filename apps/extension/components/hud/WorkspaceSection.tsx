@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { getWorkspaces, saveWorkspace, deleteWorkspace, updateWorkspace, type Workspace } from '@/lib/api-client';
+import { getWorkspaces, saveWorkspace, deleteWorkspace, type Workspace } from '@/lib/workspaces';
 import type { TabInfo } from '@/lib/types';
 
 interface WorkspaceSectionProps {
@@ -56,15 +56,6 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
     setWorkspaces((prev) => prev.filter((w) => w.id !== id));
   };
 
-  const handleUpdate = async (ws: Workspace) => {
-    try {
-      const tabData = tabs
-        .filter((t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('about:'))
-        .map((t) => ({ url: t.url, title: t.title, faviconUrl: t.faviconUrl }));
-      const updated = await updateWorkspace(ws.id, tabData);
-      setWorkspaces((prev) => prev.map((w) => w.id === ws.id ? updated : w));
-    } catch { /* API offline — ignore */ }
-  };
 
   return (
     <div
@@ -144,13 +135,6 @@ export function WorkspaceSection({ tabs }: WorkspaceSectionProps) {
                 </div>
                 <span className="text-[11px] text-white/50 group-hover:text-white/70">{ws.name}</span>
                 <span className="text-[10px] text-white/20">{ws.tabs.length}</span>
-              </button>
-              <button
-                onClick={() => handleUpdate(ws)}
-                className="text-white/15 hover:text-white/50 transition-colors text-[9px] ml-0.5"
-                title="Update with current tabs"
-              >
-                ↑
               </button>
               <button
                 onClick={() => handleDelete(ws.id)}

@@ -7,6 +7,16 @@ export default defineContentScript({
   cssInjectionMode: 'ui',
 
   async main(ctx) {
+    // Tell background to capture a thumbnail once the page is fully painted
+    const notifyLoaded = () => {
+      chrome.runtime.sendMessage({ type: 'page-loaded' }).catch(() => {});
+    };
+    if (document.readyState === 'complete') {
+      setTimeout(notifyLoaded, 300); // brief delay for paint
+    } else {
+      window.addEventListener('load', () => setTimeout(notifyLoaded, 300), { once: true });
+    }
+
     const ui = await createShadowRootUi(ctx, {
       name: 'tabflow-hud',
       position: 'overlay',

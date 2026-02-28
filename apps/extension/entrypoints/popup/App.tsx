@@ -48,7 +48,9 @@ export function App() {
 
   const handleSaveWorkspace = async () => {
     if (!workspaceName.trim()) return;
-    await saveWorkspace(workspaceName.trim());
+    const chromeTabs = await chrome.tabs.query({ currentWindow: true });
+    const tabData = chromeTabs.map((t) => ({ title: t.title || 'Untitled', url: t.url || '', faviconUrl: t.favIconUrl || '' }));
+    await saveWorkspace(workspaceName.trim(), tabData);
     setWorkspaceName('');
     setSaving(false);
     setWorkspaces(await getWorkspaces());

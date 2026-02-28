@@ -118,6 +118,15 @@ export default defineBackground(() => {
 
     // Capture immediately — already-loaded tabs render instantly on activation
     captureThumbnail(tabId, windowId);
+
+    // Retry after 1.5s in case the tab was still loading at activation time
+    // (e.g. newly opened tabs that navigate to a URL after chrome://newtab)
+    setTimeout(async () => {
+      try {
+        const activeTabs = await chrome.tabs.query({ active: true, windowId });
+        if (activeTabs[0]?.id === tabId) captureThumbnail(tabId, windowId);
+      } catch { /* tab may be gone */ }
+    }, 1500);
   });
 
   // Track tab updates (title, URL, favicon changes)
@@ -155,7 +164,10 @@ export default defineBackground(() => {
     if (changeInfo.status === 'complete') {
       try {
         const tab = await chrome.tabs.get(tabId).catch(() => null);
-        if (tab?.active) captureThumbnail(tabId, tab.windowId);
+        if (tab?.active && canSendMessage(tab.url ?? '')) {
+          // Small delay so the page has time to paint before we screenshot
+          setTimeout(() => captureThumbnail(tabId, tab.windowId), 300);
+        }
       } catch { /* tab may be gone */ }
     }
   });
@@ -255,6 +267,10 @@ export default defineBackground(() => {
       }).catch(() => {});
     }
 
+    if (message.type === 'open-url') {
+      chrome.tabs.create({ url: message.payload.url }).catch(() => {});
+    }
+
     if (message.type === 'close-tab') {
       const { tabId } = message.payload;
       // Eagerly remove from MRU NOW — before chrome.tabs.remove triggers onActivated
@@ -307,12 +323,32 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'page-loaded') {
+      // Content script fired on page ready — capture if this tab is still active
+      const tabId = sender.tab?.id;
+      const windowId = sender.tab?.windowId;
+      if (tabId && windowId && !hudVisible) {
+        chrome.tabs.query({ active: true, windowId }).then(([activeTab]) => {
+          if (activeTab?.id === tabId) captureThumbnail(tabId, windowId);
+        }).catch(() => {});
+      }
+    }
+
     if (message.type === 'ungroup-tabs') {
       const { tabIds } = message.payload;
-      chrome.tabs.ungroup(tabIds).then(() => {
-        broadcastUpdate();
-        sendResponse({ success: true });
-      }).catch(() => sendResponse({ success: false }));
+      (async () => {
+        try {
+          await chrome.tabs.ungroup(tabIds);
+          // Clear groupId from MRU so fetchTabs returns clean data
+          for (const tabId of tabIds) {
+            await updateTab(tabId, { groupId: undefined, groupTitle: undefined, groupColor: undefined });
+          }
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
       return true;
     }
 

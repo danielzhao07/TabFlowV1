@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import type { TabInfo } from '@/lib/types';
 import type { TabActions } from '@/lib/hooks/useTabActions';
 
-// Chrome's actual muted/pastel group colors
 const GROUP_COLORS: Record<string, string> = {
   blue: '#8ab4f8', cyan: '#78d9ec', green: '#81c995', yellow: '#fdd663',
   orange: '#fcad70', red: '#f28b82', pink: '#ff8bcb', purple: '#c58af9',
@@ -24,7 +23,7 @@ function getDomain(url: string): string {
 export function GroupSuggestions({
   tabs, actions, selectedTabs, groupFilter, onGroupFilterToggle,
 }: GroupSuggestionsProps) {
-  const [hoveredGroupId, setHoveredGroupId] = useState<number | null>(null);
+  const [hoveredId, setHoveredId] = useState<number | string | null>(null);
 
   const suggestions = useMemo(() => {
     const domainMap = new Map<string, TabInfo[]>();
@@ -64,69 +63,94 @@ export function GroupSuggestions({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1.5 shrink-0 overflow-x-auto"
-      style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: 'rgba(0,0,0,0.15)' }}
+      className="flex items-center gap-1.5 px-3 py-1.5 shrink-0 overflow-x-auto"
+      style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: 'rgba(0,0,0,0.18)' }}
     >
-      <span className="text-[9px] text-white/20 uppercase tracking-wider shrink-0">Groups</span>
+      <span className="text-[9px] text-white/20 uppercase tracking-wider shrink-0 mr-1">Groups</span>
 
-      {/* Existing groups — clickable to filter, hover X to dissolve */}
+      {/* Existing groups */}
       {existingGroups.map((g) => {
         const isActive = groupFilter?.has(g.groupId) ?? false;
-        return (
-          <button
-            key={g.groupId}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-md shrink-0 transition-all"
-            style={{
-              backgroundColor: isActive ? g.color + '22' : g.color + '0e',
-              border: `1px solid ${isActive ? g.color + '50' : g.color + '22'}`,
-              outline: 'none',
-            }}
-            onClick={() => onGroupFilterToggle?.(g.groupId)}
-            onMouseEnter={() => setHoveredGroupId(g.groupId)}
-            onMouseLeave={() => setHoveredGroupId(null)}
-            title={isActive ? `Showing only "${g.title}" — click to clear filter` : `Filter to "${g.title}" group`}
-          >
-            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
-            <span className="text-[10px]" style={{ color: g.color }}>{g.title}</span>
-            <span className="text-[9px] text-white/20">{g.count}</span>
+        const isHovered = hoveredId === g.groupId;
 
-            {/* Hover-reveal close/dissolve button */}
-            <span
-              className="transition-all overflow-hidden flex items-center"
-              style={{ width: hoveredGroupId === g.groupId ? 14 : 0, opacity: hoveredGroupId === g.groupId ? 1 : 0 }}
+        return (
+          <div
+            key={g.groupId}
+            className="flex items-stretch shrink-0 rounded-md overflow-hidden"
+            style={{
+              height: 26,
+              background: isHovered || isActive ? g.color + '18' : g.color + '0c',
+              border: `1px solid ${isActive ? g.color + '55' : isHovered ? g.color + '40' : g.color + '22'}`,
+              boxShadow: isHovered ? `0 0 10px ${g.color}35` : 'none',
+              transition: 'background 150ms, border-color 150ms, box-shadow 150ms',
+            }}
+            onMouseEnter={() => setHoveredId(g.groupId)}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            {/* Colored left bar */}
+            <div style={{ width: 3, background: g.color, opacity: isActive ? 1 : 0.7, flexShrink: 0 }} />
+
+            {/* Filter button */}
+            <button
+              className="flex items-center gap-2 px-2.5"
+              style={{ outline: 'none', cursor: 'pointer' }}
+              onClick={() => onGroupFilterToggle?.(g.groupId)}
+              title={isActive ? `Clear filter` : `Show only "${g.title}" tabs`}
             >
-              <span
-                role="button"
-                className="ml-0.5 w-3 h-3 flex items-center justify-center rounded-sm hover:bg-red-500/60 transition-colors"
-                style={{ color: g.color + 'cc' }}
-                onClick={(e) => { e.stopPropagation(); actions.dissolveGroup(g.groupId); }}
-                title={`Dissolve "${g.title}" group`}
-              >
-                <svg className="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <span className="text-[11px] font-medium" style={{ color: isActive ? g.color : 'rgba(255,255,255,0.65)' }}>
+                {g.title}
               </span>
-            </span>
-          </button>
+              <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                {g.count}
+              </span>
+            </button>
+
+            {/* Dissolve button */}
+            <button
+              className="flex items-center justify-center px-2 transition-colors"
+              style={{
+                borderLeft: '1px solid rgba(255,255,255,0.06)',
+                color: 'rgba(255,255,255,0.2)',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#f28b82'; (e.currentTarget as HTMLElement).style.background = 'rgba(242,139,130,0.12)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.2)'; (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              onClick={() => actions.dissolveGroup(g.groupId)}
+              title={`Ungroup all "${g.title}" tabs`}
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         );
       })}
 
-      {/* Divider if both exist */}
+      {/* Divider */}
       {existingGroups.length > 0 && (suggestions.length > 0 || hasMultiSelect) && (
-        <div className="w-px h-3 bg-white/10 shrink-0" />
+        <div className="w-px h-3.5 bg-white/10 shrink-0 mx-0.5" />
       )}
 
-      {/* Group selected tabs button */}
+      {/* Group selected tabs */}
       {hasMultiSelect && (
         <button
+          className="flex items-center gap-1.5 px-2.5 shrink-0 rounded-md transition-all"
+          style={{
+            height: 26,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: hoveredId === 'group-sel' ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.04)',
+            boxShadow: hoveredId === 'group-sel' ? '0 0 8px rgba(255,255,255,0.08)' : 'none',
+            transition: 'background 150ms, box-shadow 150ms',
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={() => setHoveredId('group-sel')}
+          onMouseLeave={() => setHoveredId(null)}
           onClick={() => actions.groupSelectedTabs()}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-md shrink-0 border border-white/[0.10] bg-white/[0.06] hover:bg-white/[0.12] hover:border-white/[0.18] transition-colors"
           title={`Group ${selectedTabs!.size} selected tabs`}
         >
-          <svg className="w-2.5 h-2.5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-          <span className="text-[10px] text-white/50">Group {selectedTabs!.size} tabs</span>
+          <span className="text-[11px] text-white/50">Group {selectedTabs!.size} tabs</span>
         </button>
       )}
 
@@ -134,15 +158,23 @@ export function GroupSuggestions({
       {suggestions.map(([domain, tabList]) => (
         <button
           key={domain}
+          className="flex items-center gap-2 px-2.5 shrink-0 rounded-md transition-all"
+          style={{
+            height: 26,
+            border: '1px solid rgba(255,255,255,0.07)',
+            background: hoveredId === domain ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.03)',
+            boxShadow: hoveredId === domain ? '0 0 8px rgba(255,255,255,0.06)' : 'none',
+            transition: 'background 150ms, box-shadow 150ms',
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={() => setHoveredId(domain)}
+          onMouseLeave={() => setHoveredId(null)}
           onClick={() => actions.groupSuggestionTabs(tabList.map((t) => t.tabId), domain)}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-md shrink-0 border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/[0.12] transition-colors"
-          title={`Group ${tabList.length} ${domain} tabs together`}
+          title={`Group ${tabList.length} ${domain} tabs`}
         >
-          <svg className="w-2.5 h-2.5 text-white/25" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          <span className="text-[10px] text-white/40">{domain}</span>
-          <span className="text-[9px] text-white/20">{tabList.length}</span>
+          <span className="text-[11px] text-white/35">{domain}</span>
+          <span className="text-[10px] text-white/20">{tabList.length}</span>
         </button>
       ))}
     </div>

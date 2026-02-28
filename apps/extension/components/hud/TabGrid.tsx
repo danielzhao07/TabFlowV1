@@ -214,14 +214,13 @@ export function TabGrid({
       style={{ padding: pad, overflow: 'visible' }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap, alignItems: 'center' }}>
-        {rowData.map(({ segments, hasGroupFirst }, rowIdx) => (
+        {rowData.map(({ segments }, rowIdx) => (
           <div
             key={rowIdx}
             style={{
               display: 'flex',
               gap,
-              // Extra top margin so folder tab labels have room above the row
-              marginTop: hasGroupFirst ? FOLDER_TAB_H : 0,
+              alignItems: 'flex-end',
             }}
           >
             {segments.map((seg, sIdx) => {
@@ -236,44 +235,37 @@ export function TabGrid({
                   key={`${seg.groupId}-${rowIdx}-${sIdx}`}
                   style={{
                     display: 'flex',
-                    gap,
-                    position: 'relative',
-                    // Dimmed outline — pastel color at 60% opacity
-                    boxShadow: `0 0 0 1.5px ${color}99`,
+                    flexDirection: 'column',
                     borderRadius: 8,
-                    // Tinted background
+                    overflow: 'hidden',
                     background: `linear-gradient(135deg, ${color}30 0%, ${color}1a 100%)`,
                     backgroundColor: color + '26',
                   }}
                 >
-                  {/* Folder tab label — sticks up above the outline */}
+                  {/* Colored header bar — full width, solid group color */}
                   {seg.isFirstRow && (
                     <div style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: 12,
-                      height: FOLDER_TAB_H + 1, // +1 so bottom edge merges with the box-shadow border
-                      paddingLeft: 20,
-                      paddingRight: 12,
-                      background: `linear-gradient(to bottom, ${color}48, ${color}30)`,
-                      border: `1.5px solid ${color}99`,
-                      borderBottom: 'none',
-                      borderRadius: '6px 6px 0 0',
+                      background: color,
+                      height: FOLDER_TAB_H,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       fontSize: 10,
                       fontWeight: 700,
-                      color,
+                      color: '#000000bb',
                       letterSpacing: '0.07em',
                       textTransform: 'uppercase',
                       whiteSpace: 'nowrap',
-                      lineHeight: 1,
-                      display: 'flex',
-                      alignItems: 'center',
+                      paddingLeft: 12,
+                      paddingRight: 12,
                     }}>
                       {seg.title || 'Group'}
                     </div>
                   )}
 
-                  {seg.cards.map((c) => renderCard(c, color))}
+                  <div style={{ display: 'flex', gap, padding: 4 }}>
+                    {seg.cards.map((c) => renderCard(c, color))}
+                  </div>
                 </div>
               );
             })}

@@ -12,17 +12,12 @@ export async function getWorkspaces(): Promise<Workspace[]> {
   return result[WORKSPACES_KEY] || [];
 }
 
-export async function saveWorkspace(name: string): Promise<Workspace> {
-  const allTabs = await chrome.tabs.query({ currentWindow: true });
+export async function saveWorkspace(name: string, tabs: Workspace['tabs']): Promise<Workspace> {
   const workspace: Workspace = {
     id: crypto.randomUUID(),
     name,
     createdAt: Date.now(),
-    tabs: allTabs.map((tab) => ({
-      title: tab.title || 'Untitled',
-      url: tab.url || '',
-      faviconUrl: tab.favIconUrl || '',
-    })),
+    tabs,
   };
 
   const workspaces = await getWorkspaces();

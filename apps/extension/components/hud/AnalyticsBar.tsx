@@ -69,10 +69,9 @@ export function AnalyticsBar({ tabs = [], onSwitch }: AnalyticsBarProps) {
             onClick={() => {
               const match = findTabForDomain(item.key, tabs);
               if (match) {
-                chrome.tabs.update(match.tabId, { active: true });
-                chrome.windows.update(match.windowId, { focused: true });
+                chrome.runtime.sendMessage({ type: 'switch-tab', payload: { tabId: match.tabId } });
               } else {
-                chrome.tabs.create({ url: 'https://' + item.key });
+                chrome.runtime.sendMessage({ type: 'open-url', payload: { url: 'https://' + item.key } });
               }
               onSwitch?.();
             }}
