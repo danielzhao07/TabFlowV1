@@ -71,16 +71,18 @@ export function TabGrid({
   const headerRowH = 26; // height of each group header row including its gap
 
   // Dynamic column/row count based on available space and tab count
-  const cols = Math.max(1, Math.min(6, Math.ceil(Math.sqrt(N * 1.4))));
+  // Cap at N so a single tab doesn't get placed in a 2-col grid (causing left-align)
+  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N * 1.4)))));
   const rows = Math.ceil(N / cols);
 
   // How many group header rows will render (named groups only, not "Other")
   const numHeaders = groupOrder.length;
 
-  const cardW = Math.min(280, Math.max(130, Math.floor((containerSize.w - pad * 2 - gap * (cols - 1)) / cols)));
+  const cardW = Math.min(300, Math.max(130, Math.floor((containerSize.w - pad * 2 - gap * (cols - 1)) / cols)));
   const availH = containerSize.h - pad * 2 - numHeaders * headerRowH - gap * (rows - 1);
   const maxCardH = rows > 0 ? Math.floor(availH / rows) : 120;
-  const cardH = Math.max(80, Math.min(maxCardH, Math.floor(cardW * 175 / 240)));
+  // Use 16:9 aspect ratio to match typical browser viewport — prevents letterboxing on screenshots
+  const cardH = Math.max(80, Math.min(maxCardH, Math.floor(cardW * 9 / 16)));
 
   const hasGroups = sortedTabs.some((t) => t.groupId);
 
@@ -109,88 +111,103 @@ export function TabGrid({
     flatIndex++;
   }
 
+  // Convert renderItems into display rows so the last partial row is centered.
+  // Each entry is either a full-width group header or a row of card items.
+  type DisplayRow =
+    | { kind: 'header'; groupId: number; title: string; color: string }
+    | { kind: 'cards'; items: Array<{ tab: TabInfo; flatIndex: number }> };
+
+  const displayRows: DisplayRow[] = [];
+  let cardBatch: Array<{ tab: TabInfo; flatIndex: number }> = [];
+
+  const flushBatch = () => {
+    for (let i = 0; i < cardBatch.length; i += cols) {
+      displayRows.push({ kind: 'cards', items: cardBatch.slice(i, i + cols) });
+    }
+    cardBatch = [];
+  };
+
+  for (const item of renderItems) {
+    if (item.kind === 'header') {
+      flushBatch();
+      displayRows.push(item);
+    } else {
+      cardBatch.push({ tab: item.tab, flatIndex: item.flatIndex });
+    }
+  }
+  flushBatch();
+
+  const rowWidth = cols * cardW + (cols - 1) * gap;
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full overflow-hidden flex items-center justify-center"
       style={{ padding: pad }}
     >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${cols}, ${cardW}px)`,
-          gap,
-          justifyContent: 'center',
-          alignContent: 'center',
-        }}
-      >
-        {renderItems.map((item) => {
-          if (item.kind === 'header') {
+      {/* Flex column: each row is a centered flex row — last partial row centers automatically */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap, alignItems: 'center' }}>
+        {displayRows.map((row, rowIdx) => {
+          if (row.kind === 'header') {
             return (
               <div
-                key={`header-${item.groupId}`}
+                key={`header-${row.groupId}`}
                 style={{
-                  gridColumn: `1 / -1`,
+                  width: rowWidth,
                   height: 22,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  marginBottom: -2,
                 }}
               >
-                <div
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: item.color,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ fontSize: 10, color: item.color, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                  {item.title}
+                <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: row.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 10, color: row.color, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  {row.title}
                 </span>
-                <div style={{ flex: 1, height: 1, backgroundColor: item.color + '30' }} />
+                <div style={{ flex: 1, height: 1, backgroundColor: row.color + '30' }} />
               </div>
             );
           }
 
-          const { tab, flatIndex: fi } = item;
           return (
-            <div
-              key={tab.tabId}
-              className="group"
-              style={{ width: cardW, height: cardH }}
-              draggable
-              onDragStart={() => { dragFromRef.current = fi; }}
-              onDragEnd={() => { dragFromRef.current = null; }}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (dragFromRef.current !== null && dragFromRef.current !== fi) {
-                  actions.reorderTabs(dragFromRef.current, fi);
-                }
-                dragFromRef.current = null;
-              }}
-            >
-              <GridCard
-                tab={tab}
-                index={fi}
-                isSelected={fi === selectedIndex}
-                isMultiSelected={selectedTabs.has(tab.tabId)}
-                isBookmarked={bookmarkedUrls.has(tab.url)}
-                isDuplicate={duplicateUrls.has(tab.url)}
-                note={notesMap.get(tab.url)}
-                thumbnail={thumbnails?.get(tab.tabId)}
-                onSwitch={actions.switchToTab}
-                onClose={actions.closeTab}
-                onTogglePin={actions.togglePin}
-                onToggleSelect={actions.toggleSelect}
-                onDuplicate={actions.duplicateTab}
-                onMoveToNewWindow={actions.moveToNewWindow}
-                onReload={actions.reloadTab}
-                animDelay={Math.min(fi * 12, 120)}
-              />
+            <div key={rowIdx} style={{ display: 'flex', gap }}>
+              {row.items.map(({ tab, flatIndex: fi }) => (
+                <div
+                  key={tab.tabId}
+                  className="group"
+                  style={{ width: cardW, height: cardH, flexShrink: 0 }}
+                  draggable
+                  onDragStart={() => { dragFromRef.current = fi; }}
+                  onDragEnd={() => { dragFromRef.current = null; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (dragFromRef.current !== null && dragFromRef.current !== fi) {
+                      actions.reorderTabs(dragFromRef.current, fi);
+                    }
+                    dragFromRef.current = null;
+                  }}
+                >
+                  <GridCard
+                    tab={tab}
+                    index={fi}
+                    isSelected={fi === selectedIndex}
+                    isMultiSelected={selectedTabs.has(tab.tabId)}
+                    isBookmarked={bookmarkedUrls.has(tab.url)}
+                    isDuplicate={duplicateUrls.has(tab.url)}
+                    note={notesMap.get(tab.url)}
+                    thumbnail={thumbnails?.get(tab.tabId)}
+                    onSwitch={actions.switchToTab}
+                    onClose={actions.closeTab}
+                    onTogglePin={actions.togglePin}
+                    onToggleSelect={actions.toggleSelect}
+                    onDuplicate={actions.duplicateTab}
+                    onMoveToNewWindow={actions.moveToNewWindow}
+                    onReload={actions.reloadTab}
+                    animDelay={Math.min(fi * 12, 120)}
+                  />
+                </div>
+              ))}
             </div>
           );
         })}

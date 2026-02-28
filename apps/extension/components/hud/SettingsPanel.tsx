@@ -139,8 +139,8 @@ export function SettingsPanel({
             {settings && (
               <>
                 <Toggle
-                  label="Hide today's tabs"
-                  description="Only show tabs from previous sessions"
+                  label="Hide today's activity"
+                  description="Hides the top-visited domains bar"
                   checked={settings.hideTodayTabs}
                   onChange={(v) => onSettingChange({ hideTodayTabs: v })}
                 />

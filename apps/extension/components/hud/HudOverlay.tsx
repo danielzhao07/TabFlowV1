@@ -60,7 +60,8 @@ export function HudOverlay() {
   const historyOnly = historyResults.filter((r) => !openUrls.has(r.url));
 
   // Compute cols: must match TabGrid's internal formula for keyboard nav to be in sync
-  const cols = Math.max(1, Math.min(6, Math.ceil(Math.sqrt(s.displayTabs.length * 1.4))));
+  const N = s.displayTabs.length;
+  const cols = Math.max(1, Math.min(N, Math.min(6, Math.ceil(Math.sqrt(N * 1.4)))));
 
   const panelRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
@@ -168,6 +169,18 @@ export function HudOverlay() {
           transition: 'opacity 180ms ease-out, transform 180ms ease-out',
         }}
       >
+        {/* Top-left: logo + tab count + analytics */}
+        <div className="absolute top-4 left-4 flex items-center gap-3" style={{ zIndex: 2147483646 }}>
+          <span className="text-[11px] font-semibold text-white/40 tracking-wider uppercase">TabFlow</span>
+          <span
+            className="text-[10px] text-white/20 px-1.5 py-0.5 rounded-md"
+            style={{ background: 'rgba(255,255,255,0.06)' }}
+          >
+            {s.displayTabs.length}
+          </span>
+          {!s.settings?.hideTodayTabs && <AnalyticsBar tabs={s.tabs} />}
+        </div>
+
         {/* Floating gear button — top-right */}
         <div className="absolute top-4 right-4" style={{ zIndex: 2147483646 }}>
           <button

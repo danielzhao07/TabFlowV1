@@ -8,8 +8,23 @@ import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/
 import { getApiUrl, getDeviceId } from '@/lib/api-client';
 import { signIn, signOut, getStoredTokens } from '@/lib/auth';
 
-// Thumbnail cache: tabId → JPEG dataUrl (max 60 entries)
+// Thumbnail cache: tabId → JPEG dataUrl (max 40 entries, persisted to storage.local)
 const tabThumbnails = new Map<number, string>();
+
+async function loadCachedThumbnails() {
+  try {
+    const result = await chrome.storage.local.get('tabflow_thumbnails');
+    if (result.tabflow_thumbnails) {
+      for (const [k, v] of Object.entries(result.tabflow_thumbnails as Record<string, string>)) {
+        tabThumbnails.set(Number(k), v);
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+function persistThumbnails() {
+  chrome.storage.local.set({ tabflow_thumbnails: Object.fromEntries(tabThumbnails) }).catch(() => {});
+}
 
 // Track whether the HUD overlay is currently visible (skip captures while it's showing)
 let hudVisible = false;
@@ -57,6 +72,9 @@ async function maybeEmbedTab(url: string, title: string) {
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
   initializeMRU();
+
+  // Restore thumbnails from last session
+  loadCachedThumbnails();
 
   // Log the redirect URL so it can be verified in Cognito settings
   console.log('[TabFlow] Cognito redirect URL:', chrome.identity.getRedirectURL());
@@ -145,6 +163,7 @@ export default defineBackground(() => {
   // Track tab removal — send targeted message for instant HUD update
   chrome.tabs.onRemoved.addListener(async (tabId) => {
     await removeTab(tabId);
+    if (tabThumbnails.delete(tabId)) persistThumbnails();
     broadcastSpecific({ type: 'tab-removed', tabId });
   });
 
@@ -204,8 +223,11 @@ export default defineBackground(() => {
 
     if (message.type === 'close-tab') {
       const { tabId } = message.payload;
+      // Eagerly remove from MRU NOW — before chrome.tabs.remove triggers onActivated
+      // which broadcasts tabs-updated and causes fetchTabs to run. Without this, a
+      // race condition means the closed tab reappears in the HUD after the refetch.
+      removeTab(tabId).catch(() => {});
       chrome.tabs.remove(tabId).catch(() => {});
-      // onRemoved listener handles MRU cleanup and broadcast
     }
 
     if (message.type === 'duplicate-tab') {
@@ -532,9 +554,10 @@ async function captureThumbnail(tabId: number, windowId: number) {
   try {
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     if (!tab || !canSendMessage(tab.url)) return;
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 55 });
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'jpeg', quality: 45 });
     tabThumbnails.set(tabId, dataUrl);
-    if (tabThumbnails.size > 60) tabThumbnails.delete(tabThumbnails.keys().next().value!);
+    if (tabThumbnails.size > 40) tabThumbnails.delete(tabThumbnails.keys().next().value!);
+    persistThumbnails();
   } catch { /* capture may fail on restricted pages */ }
 }
 

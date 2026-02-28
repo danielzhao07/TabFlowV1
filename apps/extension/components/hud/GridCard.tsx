@@ -197,7 +197,7 @@ export function GridCard({
             <img
               src={thumbnail}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover object-top"
+              className="absolute inset-0 w-full h-full object-contain"
             />
           ) : (
             <div

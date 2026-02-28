@@ -12,7 +12,6 @@ export function UndoToast({ message, onUndo, onDismiss, duration = 5000 }: UndoT
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    // Animate in
     requestAnimationFrame(() => {
       requestAnimationFrame(() => setVisible(true));
     });
@@ -34,33 +33,58 @@ export function UndoToast({ message, onUndo, onDismiss, duration = 5000 }: UndoT
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2.5 rounded-xl border border-white/[0.12] overflow-hidden"
+      className="fixed left-1/2 flex items-center gap-3 px-4 py-2.5 rounded-2xl overflow-hidden"
       style={{
+        // Sits above the bottom bar (~56px) with a small gap
+        bottom: 72,
         zIndex: 2147483647,
-        background: 'rgba(20, 20, 40, 0.95)',
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        background: 'rgba(255,255,255,0.07)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
         opacity: visible ? 1 : 0,
-        transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(12px)',
+        transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(8px)',
         transition: 'opacity 150ms ease-out, transform 150ms ease-out',
       }}
     >
-      <span className="text-[12px] text-white/70">{message}</span>
+      {/* Tab closed icon */}
+      <svg className="w-3.5 h-3.5 text-white/35 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+      </svg>
+
+      <span className="text-[12px] text-white/55 whitespace-nowrap">{message}</span>
+
       <button
         onClick={() => {
           onUndo();
           setVisible(false);
           setTimeout(onDismiss, 150);
         }}
-        className="px-2.5 py-1 rounded-md bg-cyan-400/20 text-cyan-300 text-[11px] font-medium hover:bg-cyan-400/30 transition-colors"
+        className="text-[11px] font-medium px-2.5 py-1 rounded-lg transition-colors"
+        style={{
+          color: 'rgba(147,210,255,0.8)',
+          background: 'rgba(147,210,255,0.08)',
+          border: '1px solid rgba(147,210,255,0.15)',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = 'rgba(147,210,255,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background = 'rgba(147,210,255,0.08)';
+        }}
       >
         Undo
       </button>
+
       {/* Progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/[0.06]">
+      <div className="absolute bottom-0 left-0 right-0 h-px" style={{ background: 'rgba(255,255,255,0.06)' }}>
         <div
-          className="h-full bg-cyan-400/40 transition-[width] duration-50 ease-linear"
-          style={{ width: `${progress}%` }}
+          className="h-full"
+          style={{
+            width: `${progress}%`,
+            background: 'rgba(147,210,255,0.35)',
+            transition: 'width 50ms linear',
+          }}
         />
       </div>
     </div>
