@@ -29,6 +29,8 @@ interface GridCardProps {
   onToggleMute: (tabId: number) => void;
   onCloseSelected: () => void;
   onGroupSelected: () => void;
+  onUngroupSelected: () => void;
+  onMoveSelectedToNewWindow: () => void;
   animDelay?: number;
 }
 
@@ -49,7 +51,7 @@ export function GridCard({
   tab, index, isSelected, isMultiSelected, isBookmarked, isDuplicate, note, thumbnail,
   selectedTabsCount, onSwitch, onClose, onTogglePin, onToggleSelect,
   onDuplicate, onMoveToNewWindow, onReload, onToggleBookmark, onToggleMute,
-  onCloseSelected, onGroupSelected, animDelay = 0,
+  onCloseSelected, onGroupSelected, onUngroupSelected, onMoveSelectedToNewWindow, animDelay = 0,
 }: GridCardProps) {
   const [faviconError, setFaviconError] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -82,6 +84,16 @@ export function GridCard({
       label: `Group ${selectedTabsCount} tabs`,
       icon: <IcoGroup />,
       action: onGroupSelected,
+    },
+    {
+      label: `Ungroup ${selectedTabsCount} tabs`,
+      icon: <IcoGroup />,
+      action: onUngroupSelected,
+    },
+    {
+      label: `Move ${selectedTabsCount} tabs to new window`,
+      icon: <IcoWindow />,
+      action: onMoveSelectedToNewWindow,
     },
     {
       label: `Close ${selectedTabsCount} tabs`,
@@ -138,7 +150,7 @@ export function GridCard({
   const borderColor = isSelected
     ? 'rgba(255,255,255,0.6)'
     : isMultiSelected
-    ? 'rgba(255,255,255,0.28)'
+    ? 'rgba(255,255,255,0.55)'
     : 'rgba(255,255,255,0.05)';
 
   return (
@@ -151,12 +163,14 @@ export function GridCard({
           animationDelay: `${animDelay}ms`,
           animationFillMode: 'both',
           animationTimingFunction: 'cubic-bezier(0.16,1,0.3,1)',
-          background: 'rgba(15,15,28,0.92)',
+          background: isMultiSelected ? 'rgba(28,28,42,0.96)' : 'rgba(15,15,28,0.92)',
           border: `1px solid ${borderColor}`,
           boxShadow: isSelected
             ? `0 0 0 1px rgba(255,255,255,0.15), 0 8px 32px rgba(0,0,0,0.5)`
+            : isMultiSelected
+            ? `0 0 0 1px rgba(255,255,255,0.12), 0 4px 24px rgba(0,0,0,0.5)`
             : '0 2px 12px rgba(0,0,0,0.3)',
-          transition: 'border-color 120ms, box-shadow 120ms, transform 120ms',
+          transition: 'border-color 120ms, box-shadow 120ms, transform 120ms, background 120ms',
         }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
@@ -246,6 +260,18 @@ export function GridCard({
                 </div>
               )}
               <span className="text-[11px] text-white/25 truncate px-3 max-w-full">{domain}</span>
+            </div>
+          )}
+
+          {/* Multi-select checkmark */}
+          {isMultiSelected && (
+            <div
+              className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center"
+              style={{ background: 'rgba(255,255,255,0.92)', boxShadow: '0 0 6px rgba(255,255,255,0.3)' }}
+            >
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="rgba(0,0,0,0.75)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
           )}
 

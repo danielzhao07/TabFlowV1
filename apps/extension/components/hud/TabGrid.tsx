@@ -207,6 +207,8 @@ export function TabGrid({
         onToggleMute={actions.toggleMute}
         onCloseSelected={actions.closeSelectedTabs}
         onGroupSelected={actions.groupSelectedTabs}
+        onUngroupSelected={actions.ungroupSelectedTabs}
+        onMoveSelectedToNewWindow={actions.moveSelectedToNewWindow}
         animDelay={Math.min(fi * 12, 120)}
       />
     </div>

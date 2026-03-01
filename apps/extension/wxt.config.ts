@@ -8,6 +8,9 @@ export default defineConfig({
     version: '0.1.0',
     permissions: ['tabs', 'activeTab', 'storage', 'favicon', 'sessions', 'tabGroups', 'alarms', 'identity', 'bookmarks'],
     host_permissions: ['<all_urls>'],
+    web_accessible_resources: [
+      { resources: ['TabFlowV2.png', 'TabFlowV3.png'], matches: ['<all_urls>'] },
+    ],
     commands: {
       'toggle-hud': {
         suggested_key: {

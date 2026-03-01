@@ -279,7 +279,7 @@ export function HudOverlay() {
       className="fixed inset-0 flex flex-col"
       style={{
         zIndex: 2147483647,
-        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0)',
+        backgroundColor: s.animatingIn ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0)',
         backdropFilter: s.animatingIn ? 'blur(28px) saturate(180%)' : 'blur(0px)',
         transition: 'background-color 180ms ease-out, backdrop-filter 180ms ease-out',
       }}

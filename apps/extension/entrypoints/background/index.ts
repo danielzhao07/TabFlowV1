@@ -621,6 +621,26 @@ export default defineBackground(() => {
       return true;
     }
 
+    // Move multiple tabs to a new window
+    if (message.type === 'move-tabs-to-new-window') {
+      const { tabIds } = message.payload as { tabIds: number[] };
+      (async () => {
+        try {
+          if (tabIds.length === 0) { sendResponse({ success: false }); return; }
+          const [first, ...rest] = tabIds;
+          const win = await chrome.windows.create({ tabId: first });
+          if (win.id && rest.length > 0) {
+            await chrome.tabs.move(rest, { windowId: win.id, index: -1 });
+          }
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
     // Move tab to window
     if (message.type === 'move-to-window') {
       const { tabId, windowId } = message.payload;
