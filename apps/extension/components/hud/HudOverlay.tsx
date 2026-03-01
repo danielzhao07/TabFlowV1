@@ -200,6 +200,25 @@ export function HudOverlay() {
       case 'create-workspace':
         await chrome.runtime.sendMessage({ type: 'create-workspace', payload: { name: action.name } });
         break;
+      case 'duplicate-tab':
+        await chrome.runtime.sendMessage({ type: 'duplicate-tab', payload: { tabId: action.tabId } });
+        break;
+      case 'close-by-domain':
+        await chrome.runtime.sendMessage({ type: 'close-by-domain', payload: { domain: action.domain, excludeTabId: action.keepTabId } });
+        break;
+      case 'rename-group':
+        await chrome.runtime.sendMessage({ type: 'rename-group', payload: { groupId: action.groupId, title: action.title, color: action.color } });
+        break;
+      case 'focus-window':
+        await chrome.runtime.sendMessage({ type: 'focus-window', payload: { windowId: action.windowId } });
+        break;
+      case 'discard-tabs': {
+        const discardRes = await chrome.runtime.sendMessage({ type: 'discard-tabs', payload: { tabIds: action.tabIds } });
+        if (discardRes?.discardedCount === 0) {
+          setAgentResult((prev) => prev ? { ...prev, message: 'No inactive tabs to suspend — all tabs are currently active or pinned.' } : prev);
+        }
+        break;
+      }
     }
   }, [a, s]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -214,7 +233,7 @@ export function HudOverlay() {
     try {
       const res = await chrome.runtime.sendMessage({
         type: 'ai-agent',
-        payload: { query, tabs: s.tabs },
+        payload: { query, tabs: s.tabs, windows: s.otherWindows },
       });
       if (res?.error === 'no-key') {
         setAgentResult({ message: 'Add your Groq API key in settings to use the AI agent.', actions: [] });

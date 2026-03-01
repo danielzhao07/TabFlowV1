@@ -1,6 +1,6 @@
 import { initializeMRU, pushToFront, updateTab, removeTab } from '@/lib/mru';
 import { getSettings } from '@/lib/settings';
-import { getMRUList } from '@/lib/storage';
+import { getMRUList, setMRUList } from '@/lib/storage';
 import { recordVisit } from '@/lib/frecency';
 import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
 import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
@@ -497,6 +497,45 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'rename-group') {
+      const { groupId, title, color } = message.payload as { groupId: number; title?: string; color?: string };
+      (async () => {
+        try {
+          const update: chrome.tabGroups.UpdateProperties = {};
+          if (title !== undefined) update.title = title;
+          if (color !== undefined) update.color = color as chrome.tabGroups.UpdateProperties['color'];
+          await chrome.tabGroups.update(groupId, update);
+          // Sync MRU group info for affected tabs
+          const list = await getMRUList();
+          for (const t of list) {
+            if (t.groupId === groupId) {
+              if (title !== undefined) t.groupTitle = title;
+              if (color !== undefined) t.groupColor = color;
+            }
+          }
+          await setMRUList(list);
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch (err) { sendResponse({ error: String(err) }); }
+      })();
+      return true;
+    }
+
+    if (message.type === 'discard-tabs') {
+      const { tabIds } = message.payload as { tabIds: number[] };
+      (async () => {
+        try {
+          let discardedCount = 0;
+          for (const tabId of tabIds) {
+            const result = await chrome.tabs.discard(tabId).catch(() => null);
+            if (result) discardedCount++;
+          }
+          sendResponse({ success: true, discardedCount });
+        } catch (err) { sendResponse({ error: String(err) }); }
+      })();
+      return true;
+    }
+
     if (message.type === 'get-notes') {
       getNotesMap().then((notesMap) => {
         sendResponse({ notes: Object.fromEntries(notesMap) });
@@ -877,16 +916,44 @@ export default defineBackground(() => {
             return;
           }
 
-          const { query, tabs } = message.payload as { query: string; tabs: Array<{ tabId: number; title: string; url: string; groupTitle?: string }> };
+          const { query, tabs, windows } = message.payload as {
+            query: string;
+            tabs: Array<{ tabId: number; windowId: number; title: string; url: string; groupId?: number; groupTitle?: string; groupColor?: string; isPinned?: boolean; isMuted?: boolean; isAudible?: boolean; isActive?: boolean }>;
+            windows?: Array<{ windowId: number; tabCount: number; activeTabTitle?: string }>;
+          };
 
-          // Build a tab list string for the prompt
+          // Build enriched tab list string
           const tabListString = tabs.map((t) => {
             const domain = (() => { try { return new URL(t.url).hostname.replace('www.', ''); } catch { return t.url; } })();
-            const group = t.groupTitle ? ` [group: ${t.groupTitle}]` : '';
-            return `[${t.tabId}] "${t.title}" (${domain})${group}`;
+            const group  = t.groupId ? ` [group:${t.groupId}:"${t.groupTitle ?? ''}"]` : '';
+            const flags  = [
+              t.isActive  ? '[active]'  : '',
+              t.isPinned  ? '[pinned]'  : '',
+              t.isMuted   ? '[muted]'   : '',
+              t.isAudible ? '[audible]' : '',
+            ].filter(Boolean).join(' ');
+            return `[${t.tabId}] "${t.title}" (${domain}) [win:${t.windowId}]${group}${flags ? ' ' + flags : ''}`;
           }).join('\n');
 
-          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // groups EXISTING tabs by their tabId\n- {"type":"open-urls-in-group","urls":["string"],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // opens NEW URLs and groups them together — use this when user wants new tabs opened in a group\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"} // opens a single new tab without grouping\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"mute-tab","tabId":number,"muted":boolean}\n- {"type":"bookmark-tab","tabId":number,"folder":"string (optional — name of bookmark folder to save into; creates folder if it doesn't exist)"}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"reopen-last-closed"} // reopens the last closed tab\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT RULES:\n1. When user asks to open NEW URLs and group them, use open-urls-in-group (NOT open-url + group-tabs, since new tab IDs are unknown).\n2. Use group-tabs only to group tabs that already exist in the tab list above.\n3. Use create-workspace (NOT group-tabs) when user asks to create/save a workspace.\n4. Use exact tabIds from the list. Add https:// to URLs if missing.\n5. Return empty actions array if nothing to do.`;
+          // Build group list (for rename-group — AI needs groupIds)
+          const groupMap = new Map<number, { title: string; color: string; count: number }>();
+          for (const t of tabs) {
+            if (t.groupId) {
+              const g = groupMap.get(t.groupId);
+              if (g) g.count++;
+              else groupMap.set(t.groupId, { title: t.groupTitle ?? '', color: t.groupColor ?? '', count: 1 });
+            }
+          }
+          const groupListString = groupMap.size > 0
+            ? '\n\nTab groups: ' + [...groupMap.entries()].map(([id, g]) => `[groupId:${id}] "${g.title}" (${g.color}, ${g.count} tabs)`).join(', ')
+            : '';
+
+          // Build window list
+          const windowListString = windows && windows.length > 0
+            ? '\n\nWindows: ' + windows.map((w) => `[win:${w.windowId}] (${w.tabCount} tabs${w.activeTabTitle ? `, active: "${w.activeTabTitle}"` : ''})`).join(', ')
+            : '';
+
+          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}${groupListString}${windowListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // groups EXISTING tabs\n- {"type":"open-urls-in-group","urls":["string"],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // opens NEW URLs and groups them\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"close-by-domain","domain":"string","keepTabId":number|null} // closes all tabs from a domain; set keepTabId to spare one\n- {"type":"open-url","url":"string"} // opens a single new tab\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"mute-tab","tabId":number,"muted":boolean}\n- {"type":"bookmark-tab","tabId":number,"folder":"string (optional)"}\n- {"type":"duplicate-tab","tabId":number}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"rename-group","groupId":number,"title":"string (optional)","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey (optional)"} // use exact groupId from the group list above\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"focus-window","windowId":number} // bring a window to front; use exact windowId from the window list above\n- {"type":"discard-tabs","tabIds":[number]} // suspend/hibernate tabs to free memory without closing them\n- {"type":"reopen-last-closed"}\n- {"type":"create-workspace","name":"string"}\n\nIMPORTANT RULES:\n1. When user asks to open NEW URLs and group them, use open-urls-in-group (NOT open-url + group-tabs).\n2. Use group-tabs only to group tabs that already exist in the tab list above.\n3. Use create-workspace (NOT group-tabs) when user wants to save a workspace.\n4. Use discard-tabs (NOT close-tabs) when user asks to free memory, suspend, or hibernate tabs.\n5. Use rename-group with the exact groupId from the group list. Include title and/or color as needed.\n6. Use focus-window with the exact windowId from the window list.\n7. Use close-by-domain for "close all [site] tabs" requests.\n8. Use exact tabIds from the tab list. Add https:// to URLs if missing.\n9. Return empty actions array if nothing to do.`;
 
           const requestBody = {
             model: 'llama-3.3-70b-versatile',

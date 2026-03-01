@@ -14,7 +14,12 @@ export type AgentAction =
   | { type: 'split-view'; tabId1: number; tabId2: number }
   | { type: 'merge-windows' }
   | { type: 'reopen-last-closed' }
-  | { type: 'create-workspace'; name: string };
+  | { type: 'create-workspace'; name: string }
+  | { type: 'duplicate-tab'; tabId: number }
+  | { type: 'close-by-domain'; domain: string; keepTabId?: number }
+  | { type: 'rename-group'; groupId: number; title?: string; color?: string }
+  | { type: 'focus-window'; windowId: number }
+  | { type: 'discard-tabs'; tabIds: number[] };
 
 export interface AgentResult {
   message: string;
@@ -39,6 +44,11 @@ export function describeAction(action: AgentAction): string {
     case 'merge-windows': return 'Merge all windows into one';
     case 'reopen-last-closed': return 'Reopen last closed tab';
     case 'create-workspace': return `Save workspace "${action.name}"`;
+    case 'duplicate-tab': return 'Duplicate tab';
+    case 'close-by-domain': return `Close all ${action.domain} tabs`;
+    case 'rename-group': return action.title ? `Rename group to "${action.title}"` : 'Recolor group';
+    case 'focus-window': return 'Switch to window';
+    case 'discard-tabs': return `Suspend ${action.tabIds.length} tab${action.tabIds.length === 1 ? '' : 's'}`;
     default: return 'Unknown action';
   }
 }
