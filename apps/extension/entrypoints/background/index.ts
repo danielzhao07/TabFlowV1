@@ -28,6 +28,9 @@ function persistThumbnails() {
 
 // Track whether the HUD overlay is currently visible (skip captures while it's showing)
 let hudVisible = false;
+// Timestamp of the last HUD hide — captures are blocked for 250ms after hiding
+// to cover the 150ms CSS fade-out animation and any async timing slack.
+let hudHideTime = 0;
 
 // Analytics: track focus time per tab
 let activeTabFocusStart = Date.now();
@@ -257,10 +260,13 @@ export default defineBackground(() => {
         if (!hudVisible) {
           await captureThumbnail(activeTab.id, activeTab.windowId!);
         }
+        const wasVisible = hudVisible;
         hudVisible = !hudVisible;
+        if (wasVisible) hudHideTime = Date.now(); // stamp hide time for grace period
         chrome.tabs.sendMessage(activeTab.id, { type: 'toggle-hud' }).catch(() => {
           // Content script not loaded on this tab
-          hudVisible = false; // reset if send failed
+          hudVisible = false;
+          hudHideTime = Date.now();
         });
       }
     }
@@ -629,6 +635,7 @@ export default defineBackground(() => {
     // HUD visibility tracking — so we skip thumbnail captures while HUD is showing
     if (message.type === 'hud-closed') {
       hudVisible = false;
+      hudHideTime = Date.now(); // start grace period so captures don't catch the fade-out
       sendResponse({ success: true });
       return true;
     }
@@ -752,7 +759,10 @@ export default defineBackground(() => {
 });
 
 async function captureThumbnail(tabId: number, windowId: number) {
-  if (hudVisible) return; // skip capture while HUD overlay is showing
+  // Block captures while the HUD is visible OR during its 150ms fade-out animation.
+  // hudHideTime adds a 250ms grace period after any hide event so we never snapshot
+  // the overlay while it's still transitioning out.
+  if (hudVisible || Date.now() - hudHideTime < 250) return;
   try {
     const tab = await chrome.tabs.get(tabId).catch(() => null);
     if (!tab || !canSendMessage(tab.url)) return;

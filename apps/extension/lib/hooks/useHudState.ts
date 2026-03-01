@@ -122,13 +122,16 @@ export function useHudState(): HudState {
     setShowCheatSheet(false);
     setContextMenu(null);
     setUndoToast(null);
-    chrome.runtime.sendMessage({ type: 'hud-closed' }).catch(() => {});
+    // Wait for the 150ms CSS fade-out to finish before hiding the DOM and notifying
+    // the background. This ensures the background's capture grace period starts only
+    // after the overlay is fully gone, preventing thumbnails from showing the HUD.
     setTimeout(() => {
       setVisible(false);
       setQuery('');
       setSelectedIndex(0);
       setSelectedTabs(new Set());
       setGroupFilter(new Set());
+      chrome.runtime.sendMessage({ type: 'hud-closed' }).catch(() => {});
     }, 150);
   }, []);
 
