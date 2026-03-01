@@ -6,7 +6,7 @@ export type AgentAction =
   | { type: 'open-url'; url: string }
   | { type: 'pin-tab'; tabId: number; pinned: boolean }
   | { type: 'mute-tab'; tabId: number; muted: boolean }
-  | { type: 'bookmark-tab'; tabId: number }
+  | { type: 'bookmark-tab'; tabId: number; folder?: string }
   | { type: 'switch-tab'; tabId: number }
   | { type: 'move-to-new-window'; tabId: number }
   | { type: 'reload-tab'; tabId: number }
@@ -30,7 +30,7 @@ export function describeAction(action: AgentAction): string {
     case 'open-url': return `Open ${action.url}`;
     case 'pin-tab': return action.pinned ? 'Pin tab' : 'Unpin tab';
     case 'mute-tab': return action.muted ? 'Mute tab' : 'Unmute tab';
-    case 'bookmark-tab': return 'Bookmark tab';
+    case 'bookmark-tab': return action.folder ? `Bookmark tab in "${action.folder}"` : 'Bookmark tab';
     case 'switch-tab': return 'Switch to tab';
     case 'move-to-new-window': return 'Move tab to new window';
     case 'reload-tab': return 'Reload tab';

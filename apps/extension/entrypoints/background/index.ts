@@ -470,6 +470,33 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'bookmark-tab') {
+      const { url, title, folder } = message.payload as { url: string; title: string; folder?: string };
+      (async () => {
+        try {
+          let parentId = '1'; // Bookmarks Bar by default
+          if (folder) {
+            // Search for an existing folder with this name
+            const results = await chrome.bookmarks.search({ title: folder });
+            const existing = results.find((b) => !b.url); // folders have no url
+            if (existing) {
+              parentId = existing.id;
+            } else {
+              // Create a new folder under the Bookmarks Bar
+              const created = await chrome.bookmarks.create({ parentId: '1', title: folder });
+              parentId = created.id;
+            }
+          }
+          const already = await chrome.bookmarks.search({ url });
+          if (already.length === 0) {
+            await chrome.bookmarks.create({ parentId, title, url });
+          }
+          sendResponse({ success: true });
+        } catch (err) { sendResponse({ error: String(err) }); }
+      })();
+      return true;
+    }
+
     if (message.type === 'get-notes') {
       getNotesMap().then((notesMap) => {
         sendResponse({ notes: Object.fromEntries(notesMap) });
@@ -859,7 +886,7 @@ export default defineBackground(() => {
             return `[${t.tabId}] "${t.title}" (${domain})${group}`;
           }).join('\n');
 
-          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // groups EXISTING tabs by their tabId\n- {"type":"open-urls-in-group","urls":["string"],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // opens NEW URLs and groups them together — use this when user wants new tabs opened in a group\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"} // opens a single new tab without grouping\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"mute-tab","tabId":number,"muted":boolean}\n- {"type":"bookmark-tab","tabId":number}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"reopen-last-closed"} // reopens the last closed tab\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT RULES:\n1. When user asks to open NEW URLs and group them, use open-urls-in-group (NOT open-url + group-tabs, since new tab IDs are unknown).\n2. Use group-tabs only to group tabs that already exist in the tab list above.\n3. Use create-workspace (NOT group-tabs) when user asks to create/save a workspace.\n4. Use exact tabIds from the list. Add https:// to URLs if missing.\n5. Return empty actions array if nothing to do.`;
+          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // groups EXISTING tabs by their tabId\n- {"type":"open-urls-in-group","urls":["string"],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // opens NEW URLs and groups them together — use this when user wants new tabs opened in a group\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"} // opens a single new tab without grouping\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"mute-tab","tabId":number,"muted":boolean}\n- {"type":"bookmark-tab","tabId":number,"folder":"string (optional — name of bookmark folder to save into; creates folder if it doesn't exist)"}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"reopen-last-closed"} // reopens the last closed tab\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT RULES:\n1. When user asks to open NEW URLs and group them, use open-urls-in-group (NOT open-url + group-tabs, since new tab IDs are unknown).\n2. Use group-tabs only to group tabs that already exist in the tab list above.\n3. Use create-workspace (NOT group-tabs) when user asks to create/save a workspace.\n4. Use exact tabIds from the list. Add https:// to URLs if missing.\n5. Return empty actions array if nothing to do.`;
 
           const requestBody = {
             model: 'llama-3.3-70b-versatile',

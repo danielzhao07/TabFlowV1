@@ -166,9 +166,17 @@ export function HudOverlay() {
       case 'mute-tab':
         await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId: action.tabId, muted: action.muted } });
         break;
-      case 'bookmark-tab':
-        await a.toggleBookmark(action.tabId);
+      case 'bookmark-tab': {
+        const tab = s.tabs.find((t) => t.tabId === action.tabId);
+        if (tab) {
+          if (action.folder) {
+            await chrome.runtime.sendMessage({ type: 'bookmark-tab', payload: { url: tab.url, title: tab.title, folder: action.folder } });
+          } else {
+            await a.toggleBookmark(action.tabId);
+          }
+        }
         break;
+      }
       case 'reopen-last-closed':
         await a.reopenLastClosed();
         break;
