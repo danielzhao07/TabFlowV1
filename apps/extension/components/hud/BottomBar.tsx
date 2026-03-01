@@ -80,12 +80,16 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
       </div>
 
       {/* AI sparkle button — rotating border glow wrapper */}
-      <div className="ai-glow-btn" style={{ flexShrink: 0 }}>
+      <div className="ai-glow-btn">
+        {/* Rotating conic-gradient that forms the glowing border */}
+        <div className="ai-glow-spinner" />
         <button
           onClick={onAiClick}
           title="AI tab agent (@)"
           className="flex items-center justify-center rounded-lg transition-all"
           style={{
+            position: 'relative',
+            zIndex: 1,
             width: 30,
             height: 30,
             background: isAiMode ? 'rgba(160,140,255,0.18)' : 'rgba(14,12,28,0.95)',
@@ -102,7 +106,7 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
             }
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <svg className={isAiMode ? 'ai-sparkle-icon-active' : 'ai-sparkle-icon'} width="13" height="13" viewBox="0 0 16 16" fill="none">
             <path d="M8 1l1.5 4.5L14 8l-4.5 1.5L8 15l-1.5-4.5L2 8l4.5-1.5L8 1z" fill="currentColor" />
           </svg>
         </button>

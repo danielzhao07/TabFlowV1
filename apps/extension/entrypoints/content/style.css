@@ -52,30 +52,59 @@
 }
 
 /* AI button clockwise rotating border glow */
-@keyframes rotateBorder {
-  from { --border-angle: 0deg; }
-  to   { --border-angle: 360deg; }
-}
-
 .ai-glow-btn {
   position: relative;
   border-radius: 8px;
   padding: 1px;
-  background: conic-gradient(
-    from var(--border-angle, 0deg),
-    rgba(160, 140, 255, 0.0) 0%,
-    rgba(160, 140, 255, 0.9) 20%,
-    rgba(200, 180, 255, 1.0) 40%,
-    rgba(160, 140, 255, 0.9) 60%,
-    rgba(160, 140, 255, 0.0) 80%
-  );
-  animation: rotateBorder 2s linear infinite;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
-@property --border-angle {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
+.ai-glow-spinner {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: conic-gradient(
+    rgba(160, 140, 255, 0) 0deg,
+    rgba(200, 180, 255, 1) 60deg,
+    rgba(160, 140, 255, 0) 120deg,
+    rgba(160, 140, 255, 0) 360deg
+  );
+  animation: spin 3.5s linear infinite;
+}
+
+/* Sparkle icon — subtle opacity pulse */
+@keyframes sparkle {
+  0%   { opacity: 0.3; }
+  50%  { opacity: 0.85; }
+  100% { opacity: 0.3; }
+}
+
+/* Sparkle icon — steady glow when AI mode is active */
+@keyframes sparkle-active {
+  0%   { opacity: 0.75; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.75; }
+}
+
+.ai-sparkle-icon {
+  animation: sparkle 2.8s ease-in-out infinite;
+}
+
+.ai-sparkle-icon-active {
+  animation: sparkle-active 1.8s ease-in-out infinite;
+}
+
+.ai-glow-btn button:active {
+  transform: scale(0.88);
+  transition: transform 80ms ease-out;
+}
+
+.ai-glow-btn button:active .ai-sparkle-icon,
+.ai-glow-btn button:active .ai-sparkle-icon-active {
+  animation-play-state: paused;
 }
 
 /* Context menu individual item stagger */
