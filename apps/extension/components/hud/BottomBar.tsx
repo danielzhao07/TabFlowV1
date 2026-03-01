@@ -92,7 +92,7 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
             zIndex: 1,
             width: 30,
             height: 30,
-            background: isAiMode ? 'rgba(160,140,255,0.18)' : 'rgba(14,12,28,0.95)',
+            background: isAiMode ? 'rgba(40,30,80,0.97)' : 'rgba(14,12,28,0.95)',
             color: isAiMode ? 'rgba(180,160,255,0.9)' : 'rgba(255,255,255,0.35)',
           }}
           onMouseEnter={(e) => {
@@ -106,7 +106,7 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
             }
           }}
         >
-          <svg className={isAiMode ? 'ai-sparkle-icon-active' : 'ai-sparkle-icon'} width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
             <path d="M8 1l1.5 4.5L14 8l-4.5 1.5L8 15l-1.5-4.5L2 8l4.5-1.5L8 1z" fill="currentColor" />
           </svg>
         </button>

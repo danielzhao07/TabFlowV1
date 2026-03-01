@@ -196,6 +196,9 @@ export function HudOverlay() {
         setCompletedCount(i + 1);
       }
       await s.fetchTabs();
+      chrome.runtime.sendMessage({ type: 'get-windows' }).then((windowsRes) => {
+        if (windowsRes?.windows) s.setOtherWindows(windowsRes.windows);
+      }).catch(() => {});
       setTimeout(() => {
         setAgentResult(null);
         setAiMode(false);

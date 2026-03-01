@@ -75,36 +75,13 @@
   animation: spin 3.5s linear infinite;
 }
 
-/* Sparkle icon — subtle opacity pulse */
-@keyframes sparkle {
-  0%   { opacity: 0.3; }
-  50%  { opacity: 0.85; }
-  100% { opacity: 0.3; }
-}
-
-/* Sparkle icon — steady glow when AI mode is active */
-@keyframes sparkle-active {
-  0%   { opacity: 0.75; }
-  50%  { opacity: 1; }
-  100% { opacity: 0.75; }
-}
-
-.ai-sparkle-icon {
-  animation: sparkle 2.8s ease-in-out infinite;
-}
-
-.ai-sparkle-icon-active {
-  animation: sparkle-active 1.8s ease-in-out infinite;
+.ai-glow-btn:active .ai-glow-spinner {
+  animation-play-state: paused;
 }
 
 .ai-glow-btn button:active {
   transform: scale(0.88);
   transition: transform 80ms ease-out;
-}
-
-.ai-glow-btn button:active .ai-sparkle-icon,
-.ai-glow-btn button:active .ai-sparkle-icon-active {
-  animation-play-state: paused;
 }
 
 /* Context menu individual item stagger */
