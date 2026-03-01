@@ -6,20 +6,32 @@ interface BottomBarProps {
   isAiMode?: boolean;
   onAiClick?: () => void;
   onAiSubmit?: (query: string) => void;
+  promptHistory?: string[];
 }
 
-export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmit }: BottomBarProps) {
+export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmit, promptHistory }: BottomBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const historyIdxRef = useRef(-1);
+  const savedInputRef = useRef('');
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // Use rAF to ensure focus happens after the browser has painted and focus is grantable
+    requestAnimationFrame(() => { inputRef.current?.focus(); });
   }, []);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    requestAnimationFrame(() => { inputRef.current?.focus(); });
+  }, [isAiMode]);
+
+  // Reset history navigation when AI mode toggles
+  useEffect(() => {
+    historyIdxRef.current = -1;
+    savedInputRef.current = '';
   }, [isAiMode]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Reset history navigation on manual typing
+    historyIdxRef.current = -1;
     const val = e.target.value;
     if (!isAiMode && val === '@' && onAiClick) {
       onAiClick();
@@ -32,7 +44,36 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (isAiMode && e.key === 'Enter' && query.trim() && onAiSubmit) {
       e.preventDefault();
+      historyIdxRef.current = -1;
       onAiSubmit(query.trim());
+      return;
+    }
+
+    // Prompt history navigation (only in AI mode)
+    if (isAiMode && promptHistory && promptHistory.length > 0) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (historyIdxRef.current === -1) {
+          // Save current input before navigating
+          savedInputRef.current = query;
+          historyIdxRef.current = 0;
+        } else if (historyIdxRef.current < promptHistory.length - 1) {
+          historyIdxRef.current++;
+        }
+        onQueryChange(promptHistory[historyIdxRef.current]);
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (historyIdxRef.current > 0) {
+          historyIdxRef.current--;
+          onQueryChange(promptHistory[historyIdxRef.current]);
+        } else if (historyIdxRef.current === 0) {
+          historyIdxRef.current = -1;
+          onQueryChange(savedInputRef.current);
+        }
+        return;
+      }
     }
   };
 

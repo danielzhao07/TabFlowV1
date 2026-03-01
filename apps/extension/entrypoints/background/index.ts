@@ -55,6 +55,21 @@ async function reportVisit(url: string, domain: string, title: string, durationM
 }
 
 
+/** Recursively collect all URL bookmarks from Chrome's bookmark tree */
+function collectChromeBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[]): { url: string; title: string }[] {
+  const result: { url: string; title: string }[] = [];
+  for (const node of nodes) {
+    if (node.url) result.push({ url: node.url, title: node.title });
+    if (node.children) result.push(...collectChromeBookmarks(node.children));
+  }
+  return result;
+}
+
+async function getChromeBookmarks(): Promise<{ url: string; title: string }[]> {
+  const tree = await chrome.bookmarks.getTree();
+  return collectChromeBookmarks(tree);
+}
+
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
   initializeMRU();
@@ -281,6 +296,9 @@ export default defineBackground(() => {
             if (live.title && live.title !== 'New Tab') tab.title = live.title;
             if (live.url) tab.url = live.url;
             if (live.favIconUrl) tab.faviconUrl = live.favIconUrl;
+            tab.isMuted = live.mutedInfo?.muted ?? false;
+            tab.isAudible = live.audible ?? tab.isAudible;
+            tab.isPinned = live.pinned ?? tab.isPinned;
           }
         }
 
@@ -299,6 +317,7 @@ export default defineBackground(() => {
               isActive: chromeTab.active,
               isPinned: chromeTab.pinned,
               isAudible: chromeTab.audible ?? false,
+              isMuted: chromeTab.mutedInfo?.muted ?? false,
               isDiscarded: chromeTab.discarded ?? false,
               groupId: chromeTab.groupId !== -1 ? chromeTab.groupId : undefined,
             });
@@ -421,19 +440,33 @@ export default defineBackground(() => {
     }
 
     if (message.type === 'get-bookmarks') {
-      getBookmarks().then((bookmarks) => sendResponse({ bookmarks }));
+      getChromeBookmarks().then((bookmarks) => sendResponse({ bookmarks })).catch(() => sendResponse({ bookmarks: [] }));
       return true;
     }
 
     if (message.type === 'add-bookmark') {
-      const { url, title, faviconUrl } = message.payload;
-      addBookmark({ url, title, faviconUrl }).then((bookmarks) => sendResponse({ bookmarks }));
+      const { url, title } = message.payload;
+      (async () => {
+        try {
+          const existing = await chrome.bookmarks.search({ url });
+          if (existing.length === 0) {
+            await chrome.bookmarks.create({ parentId: '1', title, url });
+          }
+          sendResponse({ bookmarks: await getChromeBookmarks() });
+        } catch { sendResponse({ bookmarks: [] }); }
+      })();
       return true;
     }
 
     if (message.type === 'remove-bookmark') {
       const { url } = message.payload;
-      removeBookmark(url).then((bookmarks) => sendResponse({ bookmarks }));
+      (async () => {
+        try {
+          const existing = await chrome.bookmarks.search({ url });
+          for (const b of existing) await chrome.bookmarks.remove(b.id).catch(() => {});
+          sendResponse({ bookmarks: await getChromeBookmarks() });
+        } catch { sendResponse({ bookmarks: [] }); }
+      })();
       return true;
     }
 
@@ -592,6 +625,34 @@ export default defineBackground(() => {
             });
           await saveWorkspace(name, tabData);
           broadcastSpecific({ type: 'workspace-updated' });
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
+    if (message.type === 'open-urls-in-group') {
+      const { urls, title, color } = message.payload;
+      (async () => {
+        try {
+          const createdTabIds: number[] = [];
+          for (const url of (urls as string[])) {
+            const tab = await chrome.tabs.create({ url, active: false });
+            if (tab.id) createdTabIds.push(tab.id);
+          }
+          if (createdTabIds.length > 0) {
+            const groupId = await chrome.tabs.group({ tabIds: createdTabIds });
+            await chrome.tabGroups.update(groupId, { title, color: (color || 'blue') as chrome.tabGroups.ColorEnum });
+            try {
+              const group = await chrome.tabGroups.get(groupId);
+              for (const tabId of createdTabIds) {
+                await updateTab(tabId, { groupId, groupTitle: group.title || '', groupColor: group.color });
+              }
+            } catch { /* best effort */ }
+          }
+          broadcastUpdate();
           sendResponse({ success: true });
         } catch {
           sendResponse({ success: false });
@@ -798,7 +859,7 @@ export default defineBackground(() => {
             return `[${t.tabId}] "${t.title}" (${domain})${group}`;
           }).join('\n');
 
-          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"}\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"}\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT: use create-workspace (NOT group-tabs) when the user asks to create/save a workspace. Use exact tabIds from the list. Add https:// to URLs if missing. Return empty actions array if nothing to do.`;
+          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // groups EXISTING tabs by their tabId\n- {"type":"open-urls-in-group","urls":["string"],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"} // opens NEW URLs and groups them together — use this when user wants new tabs opened in a group\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"} // opens a single new tab without grouping\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"mute-tab","tabId":number,"muted":boolean}\n- {"type":"bookmark-tab","tabId":number}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"reopen-last-closed"} // reopens the last closed tab\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT RULES:\n1. When user asks to open NEW URLs and group them, use open-urls-in-group (NOT open-url + group-tabs, since new tab IDs are unknown).\n2. Use group-tabs only to group tabs that already exist in the tab list above.\n3. Use create-workspace (NOT group-tabs) when user asks to create/save a workspace.\n4. Use exact tabIds from the list. Add https:// to URLs if missing.\n5. Return empty actions array if nothing to do.`;
 
           const requestBody = {
             model: 'llama-3.3-70b-versatile',

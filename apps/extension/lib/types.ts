@@ -8,6 +8,7 @@ export interface TabInfo {
   isActive: boolean;
   isPinned: boolean;
   isAudible: boolean;
+  isMuted: boolean;
   isDiscarded: boolean;
   groupId?: number;
   groupTitle?: string;

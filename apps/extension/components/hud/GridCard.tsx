@@ -25,6 +25,8 @@ interface GridCardProps {
   onDuplicate: (tabId: number) => void;
   onMoveToNewWindow: (tabId: number) => void;
   onReload: (tabId: number) => void;
+  onToggleBookmark: (tabId: number) => void;
+  onToggleMute: (tabId: number) => void;
   onCloseSelected: () => void;
   onGroupSelected: () => void;
   animDelay?: number;
@@ -41,12 +43,13 @@ function domainColor(domain: string): string {
 }
 
 // Re-use icon set from ContextMenu so they match exactly
-const { Pin: IcoPin, Copy: IcoDuplicate, Window: IcoWindow, Reload: IcoReload, X: IcoClose, Grid: IcoGroup } = MenuIcons;
+const { Pin: IcoPin, Copy: IcoDuplicate, Window: IcoWindow, Reload: IcoReload, X: IcoClose, Grid: IcoGroup, Bookmark: IcoBookmark, Volume: IcoVolume } = MenuIcons;
 
 export function GridCard({
   tab, index, isSelected, isMultiSelected, isBookmarked, isDuplicate, note, thumbnail,
   selectedTabsCount, onSwitch, onClose, onTogglePin, onToggleSelect,
-  onDuplicate, onMoveToNewWindow, onReload, onCloseSelected, onGroupSelected, animDelay = 0,
+  onDuplicate, onMoveToNewWindow, onReload, onToggleBookmark, onToggleMute,
+  onCloseSelected, onGroupSelected, animDelay = 0,
 }: GridCardProps) {
   const [faviconError, setFaviconError] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -95,6 +98,16 @@ export function GridCard({
       label: tab.isPinned ? 'Unpin tab' : 'Pin tab',
       icon: <IcoPin />,
       action: () => onTogglePin(tab.tabId, !tab.isPinned),
+    },
+    {
+      label: isBookmarked ? 'Remove bookmark' : 'Bookmark tab',
+      icon: <IcoBookmark filled={isBookmarked} />,
+      action: () => onToggleBookmark(tab.tabId),
+    },
+    {
+      label: tab.isMuted ? 'Unmute tab' : 'Mute tab',
+      icon: <IcoVolume muted={tab.isMuted} />,
+      action: () => onToggleMute(tab.tabId),
     },
     {
       label: 'Duplicate tab',

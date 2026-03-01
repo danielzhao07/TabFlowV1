@@ -194,7 +194,7 @@ export function useTabActions(s: HudState): TabActions {
   const toggleMute = useCallback(async (tabId: number) => {
     const tab = s.tabs.find((t) => t.tabId === tabId);
     if (!tab) return;
-    await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId, muted: !tab.isAudible } });
+    await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId, muted: !tab.isMuted } });
     s.fetchTabs();
   }, [s]);
 

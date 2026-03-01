@@ -63,7 +63,30 @@ const Grid = () => (
   </svg>
 );
 
-export const MenuIcons = { Pin, Copy, Window, Reload, X, Grid };
+const Bookmark = ({ filled }: { filled?: boolean }) => (
+  <svg width="15" height="15" viewBox="0 0 15 15" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2.5A1.5 1.5 0 014.5 1h6A1.5 1.5 0 0112 2.5v11l-4.5-2.5L3 13.5V2.5z" />
+  </svg>
+);
+
+const Volume = ({ muted }: { muted?: boolean }) => (
+  <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M2 5.5h2.5l3-3v10l-3-3H2V5.5z" />
+    {muted ? (
+      <>
+        <line x1="10" y1="5" x2="14" y2="10" />
+        <line x1="14" y1="5" x2="10" y2="10" />
+      </>
+    ) : (
+      <>
+        <path d="M10 4.5a5 5 0 010 6" />
+        <path d="M12 2.5a8 8 0 010 10" />
+      </>
+    )}
+  </svg>
+);
+
+export const MenuIcons = { Pin, Copy, Window, Reload, X, Grid, Bookmark, Volume };
 
 // ─── Component ─────────────────────────────────────────────────────────────
 export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {

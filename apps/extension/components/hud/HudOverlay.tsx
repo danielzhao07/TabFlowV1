@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useHudState, loadHudData } from '@/lib/hooks/useHudState';
 import { useTabActions } from '@/lib/hooks/useTabActions';
 import { useKeyboardNav } from '@/lib/hooks/useKeyboardNav';
@@ -31,6 +31,7 @@ export function HudOverlay() {
   const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
   const [wsRefreshKey, setWsRefreshKey] = useState(0);
+  const promptHistoryRef = useRef<string[]>([]);
 
   // Compute cols: must match TabGrid's internal formula exactly for keyboard nav to be in sync
   const N = s.displayTabs.length;
@@ -59,6 +60,15 @@ export function HudOverlay() {
     return () => clearInterval(interval);
   }, [s.visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load prompt history from storage on mount (shared across tabs + sessions)
+  useEffect(() => {
+    chrome.storage.local.get('tabflow_prompt_history').then((result) => {
+      if (Array.isArray(result.tabflow_prompt_history)) {
+        promptHistoryRef.current = result.tabflow_prompt_history;
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Listen for messages from background
   useEffect(() => {
     const listener = (message: { type: string; tabId?: number }) => {
@@ -77,6 +87,12 @@ export function HudOverlay() {
             s.fetchTabs();
             s.fetchRecentTabs();
             loadHudData(s);
+            // Reload prompt history from storage in case another tab updated it
+            chrome.storage.local.get('tabflow_prompt_history').then((result) => {
+              if (Array.isArray(result.tabflow_prompt_history)) {
+                promptHistoryRef.current = result.tabflow_prompt_history;
+              }
+            }).catch(() => {});
             chrome.runtime.sendMessage({ type: 'get-all-thumbnails' }).then((res) => {
               if (res?.thumbnails) {
                 s.setThumbnails(new Map(
@@ -129,6 +145,9 @@ export function HudOverlay() {
       case 'group-tabs':
         await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds: action.tabIds, title: action.title, color: action.color || 'blue' } });
         break;
+      case 'open-urls-in-group':
+        await chrome.runtime.sendMessage({ type: 'open-urls-in-group', payload: { urls: action.urls, title: action.title, color: action.color || 'blue' } });
+        break;
       case 'close-tab':
         a.closeTab(action.tabId);
         break;
@@ -142,7 +161,16 @@ export function HudOverlay() {
         await chrome.runtime.sendMessage({ type: 'open-url', payload: { url: action.url } });
         break;
       case 'pin-tab':
-        await chrome.runtime.sendMessage({ type: 'pin-tab', payload: { tabId: action.tabId, pinned: action.pinned } });
+        a.togglePin(action.tabId, action.pinned);
+        break;
+      case 'mute-tab':
+        await chrome.runtime.sendMessage({ type: 'mute-tab', payload: { tabId: action.tabId, muted: action.muted } });
+        break;
+      case 'bookmark-tab':
+        await a.toggleBookmark(action.tabId);
+        break;
+      case 'reopen-last-closed':
+        await a.reopenLastClosed();
         break;
       case 'switch-tab':
         await chrome.runtime.sendMessage({ type: 'switch-tab', payload: { tabId: action.tabId } });
@@ -169,6 +197,9 @@ export function HudOverlay() {
   }, [a, s]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAiSubmit = useCallback(async (query: string) => {
+    // Save to prompt history (newest first, max 50, deduped, persisted across tabs)
+    promptHistoryRef.current = [query, ...promptHistoryRef.current.filter((q) => q !== query).slice(0, 49)];
+    chrome.storage.local.set({ tabflow_prompt_history: promptHistoryRef.current }).catch(() => {});
     setAiPending(true);
     setAgentResult(null);
     setCompletedCount(0);
@@ -231,6 +262,12 @@ export function HudOverlay() {
           s.hide();
         }
       }}
+      onKeyDown={(e) => {
+        // Prevent keystrokes from leaking to the underlying page while HUD is open
+        e.stopPropagation();
+      }}
+      onKeyUp={(e) => e.stopPropagation()}
+      onKeyPress={(e) => e.stopPropagation()}
     >
       <div
         ref={panelRef}
@@ -368,6 +405,7 @@ export function HudOverlay() {
             isAiMode={aiMode}
             onAiClick={() => setAiMode((p) => !p)}
             onAiSubmit={handleAiSubmit}
+            promptHistory={promptHistoryRef.current}
           />
         </div>
       </div>

@@ -203,6 +203,8 @@ export function TabGrid({
         onDuplicate={actions.duplicateTab}
         onMoveToNewWindow={actions.moveToNewWindow}
         onReload={actions.reloadTab}
+        onToggleBookmark={actions.toggleBookmark}
+        onToggleMute={actions.toggleMute}
         onCloseSelected={actions.closeSelectedTabs}
         onGroupSelected={actions.groupSelectedTabs}
         animDelay={Math.min(fi * 12, 120)}
