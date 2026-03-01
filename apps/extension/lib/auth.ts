@@ -160,6 +160,51 @@ export async function signIn(): Promise<TokenSet> {
   return tokenSet;
 }
 
+// ---- Direct password-based auth (proxied through backend) ----
+
+async function getApiBaseUrl(): Promise<string> {
+  const result = await chrome.storage.local.get('tabflow_api_url');
+  return (result['tabflow_api_url'] as string) ?? 'http://localhost:3001';
+}
+
+async function apiPost(path: string, body: object): Promise<any> {
+  const apiUrl = await getApiBaseUrl();
+  const res = await fetch(`${apiUrl}/api/auth/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json() as any;
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+export async function loginWithPassword(email: string, password: string): Promise<TokenSet> {
+  const data = await apiPost('login', { email, password });
+  const { idToken, accessToken, expiresIn } = data;
+  const payload = parseJwtPayload(idToken);
+  const tokenSet: TokenSet = {
+    idToken,
+    accessToken,
+    email: payload.email ?? email,
+    expiresAt: Date.now() + expiresIn * 1000,
+  };
+  await chrome.storage.local.set({ tabflow_tokens: tokenSet });
+  return tokenSet;
+}
+
+export async function signUpUser(email: string, password: string): Promise<void> {
+  await apiPost('signup', { email, password });
+}
+
+export async function confirmUserSignUp(email: string, code: string): Promise<void> {
+  await apiPost('confirm', { email, code });
+}
+
+export async function resendConfirmationCode(email: string): Promise<void> {
+  await apiPost('resend', { email });
+}
+
 // ---- Sign out ----
 
 export async function signOut(): Promise<void> {

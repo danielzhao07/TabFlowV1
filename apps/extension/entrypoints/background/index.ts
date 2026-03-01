@@ -7,7 +7,43 @@ import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
 import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
 import { getApiUrl, getDeviceId } from '@/lib/api-client';
 import { saveWorkspace } from '@/lib/workspaces';
-import { signIn, signOut, getStoredTokens } from '@/lib/auth';
+import { signOut, getStoredTokens, type TokenSet } from '@/lib/auth';
+
+/** Opens the custom auth window and resolves when auth completes or is cancelled. */
+function openAuthWindow(): Promise<{ success: boolean; tokenSet?: TokenSet; error?: string }> {
+  return new Promise(async (resolve) => {
+    const popup = await chrome.windows.create({
+      url: chrome.runtime.getURL('auth.html'),
+      type: 'popup',
+      width: 440,
+      height: 620,
+      focused: true,
+    });
+
+    const onMessage = (msg: any) => {
+      if (msg.type !== 'auth-complete') return;
+      cleanup();
+      chrome.windows.remove(popup.id!).catch(() => {});
+      resolve(msg.success
+        ? { success: true, tokenSet: msg.tokenSet }
+        : { success: false, error: msg.error || 'Auth failed' });
+    };
+
+    const onWindowClosed = (windowId: number) => {
+      if (windowId !== popup.id) return;
+      cleanup();
+      resolve({ success: false, error: 'Sign-in cancelled' });
+    };
+
+    function cleanup() {
+      chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.windows.onRemoved.removeListener(onWindowClosed);
+    }
+
+    chrome.runtime.onMessage.addListener(onMessage);
+    chrome.windows.onRemoved.addListener(onWindowClosed);
+  });
+}
 
 // Thumbnail cache: tabId → JPEG dataUrl (max 40 entries, persisted to storage.local)
 const tabThumbnails = new Map<number, string>();
@@ -85,7 +121,7 @@ export default defineBackground(() => {
     if (reason === 'install') {
       const existing = await getStoredTokens();
       if (!existing) {
-        signIn().catch(() => {}); // user may cancel — that's fine
+        openAuthWindow().catch(() => {}); // user may cancel — that's fine
       }
     }
   });
@@ -826,8 +862,8 @@ export default defineBackground(() => {
 
     // Sign in/out — chrome.identity is only available in background, not content scripts
     if (message.type === 'sign-in') {
-      signIn()
-        .then((tokenSet) => sendResponse({ success: true, tokenSet }))
+      openAuthWindow()
+        .then((result) => sendResponse(result))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
     }

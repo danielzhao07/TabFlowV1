@@ -161,7 +161,8 @@ export function SettingsPanel({
                 <img
                   src={chrome.runtime.getURL('TabFlowV3.png')}
                   alt="TabFlow"
-                  className="w-24 h-24 object-contain mb-3"
+                  className="w-28 h-28 object-contain mb-3"
+                  style={{ transform: 'scale(1.25)', transformOrigin: 'center' }}
                 />
                 <span className="text-[15px] font-semibold text-white/90 tracking-tight">TabFlow</span>
                 <span className="text-[11px] text-white/35 mt-0.5">Your intelligent tab manager</span>
