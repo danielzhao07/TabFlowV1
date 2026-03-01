@@ -115,7 +115,9 @@ export function useTabActions(s: HudState): TabActions {
     let topDomain = '';
     let topCount = 0;
     for (const [d, c] of domainCounts) { if (c > topCount) { topDomain = d; topCount = c; } }
-    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: topDomain.split('.')[0] || '' } });
+    const usedColors = new Set(s.tabs.filter((t) => t.groupColor).map((t) => t.groupColor!));
+    const color = pickGroupColor(topDomain, usedColors);
+    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: topDomain.split('.')[0] || '', color } });
     s.setSelectedTabs(new Set());
     s.fetchTabs();
   }, [s]);
@@ -202,7 +204,9 @@ export function useTabActions(s: HudState): TabActions {
   }, [s]);
 
   const groupSuggestionTabs = useCallback(async (tabIds: number[], domain: string) => {
-    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: domain.split('.')[0] || domain } });
+    const usedColors = new Set(s.tabs.filter((t) => t.groupColor).map((t) => t.groupColor!));
+    const color = pickGroupColor(domain, usedColors);
+    await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds, title: domain.split('.')[0] || domain, color } });
     await new Promise<void>((r) => setTimeout(r, 150));
     s.fetchTabs();
   }, [s]);
@@ -249,4 +253,49 @@ export function useTabActions(s: HudState): TabActions {
 
 function getDomain(url: string): string {
   try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+}
+
+const CHROME_COLORS = [
+  'blue', 'cyan', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'grey',
+] as const;
+type ChromeColor = typeof CHROME_COLORS[number];
+
+// Well-known domains mapped to their closest brand color
+const DOMAIN_COLOR_HINTS: Record<string, ChromeColor> = {
+  'youtube.com': 'red', 'youtu.be': 'red', 'netflix.com': 'red', 'twitch.tv': 'purple',
+  'github.com': 'purple', 'gitlab.com': 'orange', 'stackoverflow.com': 'orange',
+  'twitter.com': 'blue', 'x.com': 'blue', 'linkedin.com': 'blue', 'facebook.com': 'blue',
+  'figma.com': 'purple', 'notion.so': 'grey', 'obsidian.md': 'purple',
+  'spotify.com': 'green', 'google.com': 'blue', 'gmail.com': 'red',
+  'reddit.com': 'orange', 'amazon.com': 'orange', 'amazon.ca': 'orange',
+  'discord.com': 'purple', 'slack.com': 'pink', 'whatsapp.com': 'green',
+  'openai.com': 'grey', 'anthropic.com': 'orange', 'claude.ai': 'orange',
+};
+
+/**
+ * Pick a Chrome tab group color for a domain that:
+ * 1. Matches the site's brand color if known
+ * 2. Is derived from the domain name (same domain → same color, always)
+ * 3. Avoids colors already used by other groups in the current window
+ */
+function pickGroupColor(domain: string, usedColors: Set<string>): ChromeColor {
+  const hint = DOMAIN_COLOR_HINTS[domain];
+  if (hint && !usedColors.has(hint)) return hint;
+
+  // Hash domain string to a consistent starting index
+  let hash = 0;
+  const seed = domain || 'tab';
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) & 0x7fffffff;
+  }
+  const startIdx = hash % CHROME_COLORS.length;
+
+  // Cycle forward from the hash index, skipping already-used colors
+  for (let i = 0; i < CHROME_COLORS.length; i++) {
+    const color = CHROME_COLORS[(startIdx + i) % CHROME_COLORS.length];
+    if (!usedColors.has(color)) return color;
+  }
+
+  // All 9 colors taken — use the brand hint or hashed index (best effort)
+  return hint ?? CHROME_COLORS[startIdx];
 }

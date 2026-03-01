@@ -297,7 +297,8 @@ export default defineBackground(() => {
           }
         }
 
-        // Tabs that exist in Chrome but are missing from MRU — add them at the end
+        // Tabs that exist in Chrome but are missing from MRU — add them at the end.
+        // Include groupId from Chrome so the group info lookup below applies to them too.
         const mruIds = new Set(aliveTabs.map((t) => t.tabId));
         for (const chromeTab of chromeTabs) {
           if (chromeTab.id && !mruIds.has(chromeTab.id)) {
@@ -312,6 +313,7 @@ export default defineBackground(() => {
               isPinned: chromeTab.pinned,
               isAudible: chromeTab.audible ?? false,
               isDiscarded: chromeTab.discarded ?? false,
+              groupId: chromeTab.groupId !== -1 ? chromeTab.groupId : undefined,
             });
           }
         }
