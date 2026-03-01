@@ -164,28 +164,22 @@ export function TabGrid({
   }
 
   // Reusable card renderer; groupColor applies a per-card colored outline
-  const renderCard = ({ tab, flatIndex: fi }: { tab: TabInfo; flatIndex: number }, groupColor?: string) => (
-    <div
-      key={tab.tabId}
-      className="group"
-      style={{
-        width: cardW, height: cardH, flexShrink: 0,
-        transition: 'width 180ms ease, height 180ms ease',
-        borderRadius: 10,
-        boxShadow: groupColor ? `0 0 0 1.5px ${groupColor}99` : undefined,
-      }}
-      draggable
-      onDragStart={() => { dragFromRef.current = fi; }}
-      onDragEnd={() => { dragFromRef.current = null; }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
+  const renderCard = ({ tab, flatIndex: fi }: { tab: TabInfo; flatIndex: number }, groupColor?: string) => {
+    const dragHandlers = {
+      draggable: true as const,
+      onDragStart: () => { dragFromRef.current = fi; },
+      onDragEnd: () => { dragFromRef.current = null; },
+      onDragOver: (e: React.DragEvent) => e.preventDefault(),
+      onDrop: (e: React.DragEvent) => {
         e.preventDefault();
         if (dragFromRef.current !== null && dragFromRef.current !== fi) {
           actions.reorderTabs(dragFromRef.current, fi);
         }
         dragFromRef.current = null;
-      }}
-    >
+      },
+    };
+
+    const card = (
       <GridCard
         tab={tab}
         index={fi}
@@ -211,8 +205,52 @@ export function TabGrid({
         onMoveSelectedToNewWindow={actions.moveSelectedToNewWindow}
         animDelay={Math.min(fi * 12, 120)}
       />
-    </div>
-  );
+    );
+
+    if (tab.isActive) {
+      // Same approach as ai-glow-btn: oversized 200% spinner clipped by overflow:hidden,
+      // explicit pixel inner dimensions create the border gap on all 4 sides.
+      return (
+        <div
+          key={tab.tabId}
+          className="group"
+          style={{
+            width: cardW, height: cardH, flexShrink: 0,
+            transition: 'width 180ms ease, height 180ms ease',
+            position: 'relative', borderRadius: 11, overflow: 'hidden',
+            padding: 2,
+          }}
+          {...dragHandlers}
+        >
+          <div className="tab-glow-spin" />
+          <div style={{
+            width: cardW - 4, height: cardH - 4,
+            position: 'relative', zIndex: 1,
+            borderRadius: 9, overflow: 'hidden',
+            background: 'rgba(15,15,28,0.95)',
+          }}>
+            {card}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={tab.tabId}
+        className="group"
+        style={{
+          width: cardW, height: cardH, flexShrink: 0,
+          transition: 'width 180ms ease, height 180ms ease',
+          borderRadius: 10,
+          boxShadow: groupColor ? `0 0 0 1.5px ${groupColor}99` : undefined,
+        }}
+        {...dragHandlers}
+      >
+        {card}
+      </div>
+    );
+  };
 
   return (
     <div

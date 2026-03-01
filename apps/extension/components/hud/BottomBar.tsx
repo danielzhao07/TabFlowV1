@@ -87,7 +87,10 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
         className="flex-1 flex items-center gap-2 rounded-xl border px-3 py-2 transition-colors"
         style={{
           background: 'rgba(255,255,255,0.04)',
-          borderColor: isAiMode ? 'rgba(160,140,255,0.4)' : 'rgba(255,255,255,0.06)',
+          borderColor: isAiMode ? 'rgba(160,140,255,0.5)' : 'rgba(99,179,237,0.35)',
+          boxShadow: isAiMode
+            ? '0 0 10px rgba(160,140,255,0.15)'
+            : '0 0 10px rgba(99,179,237,0.12)',
         }}
       >
         {isAiMode ? (

@@ -84,6 +84,22 @@
   transition: transform 80ms ease-out;
 }
 
+/* Active tab card: oversized 200% spinner (stays clipped by overflow:hidden parent) */
+.tab-glow-spin {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background: conic-gradient(
+    rgba(99, 179, 237, 0) 0deg,
+    rgba(147, 210, 255, 1) 60deg,
+    rgba(99, 179, 237, 0) 120deg,
+    rgba(99, 179, 237, 0) 360deg
+  );
+  animation: spin 3.5s linear infinite;
+}
+
 /* Sign-in card counter-clockwise blue rotating border glow */
 .signin-glow-wrap {
   position: relative;
