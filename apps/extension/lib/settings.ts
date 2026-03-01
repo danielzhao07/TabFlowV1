@@ -10,6 +10,7 @@ export interface TabFlowSettings {
   autoSuspendMinutes: number; // minutes of inactivity before discarding
   gridColumns: number; // 0 = auto (responsive), otherwise fixed column count
   hideTodayTabs: boolean; // hide tabs last accessed today
+  groqApiKey?: string; // Groq API key for AI tab agent
 }
 
 const SETTINGS_KEY = 'tabflow_settings';
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: TabFlowSettings = {
   autoSuspendMinutes: 30,
   gridColumns: 0,
   hideTodayTabs: false,
+  groqApiKey: '',
 };
 
 export async function getSettings(): Promise<TabFlowSettings> {

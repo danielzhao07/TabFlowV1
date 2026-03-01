@@ -6,6 +6,7 @@ import { getBookmarks, addBookmark, removeBookmark } from '@/lib/bookmarks';
 import { getNotesMap, saveNote, deleteNote } from '@/lib/notes';
 import { getSnoozedTabs, snoozeTab, removeSnoozedTab, wakeExpiredTabs } from '@/lib/snooze';
 import { getApiUrl, getDeviceId } from '@/lib/api-client';
+import { saveWorkspace } from '@/lib/workspaces';
 import { signIn, signOut, getStoredTokens } from '@/lib/auth';
 
 // Thumbnail cache: tabId → JPEG dataUrl (max 40 entries, persisted to storage.local)
@@ -53,24 +54,6 @@ async function reportVisit(url: string, domain: string, title: string, durationM
   } catch { /* ignore */ }
 }
 
-/** Embed a tab in the AI index — throttled to once per 12h per URL */
-async function maybeEmbedTab(url: string, title: string) {
-  if (!url || !title || !canSendMessage(url)) return;
-  try {
-    const cacheKey = `embed_ts_${url}`;
-    const cache = await chrome.storage.local.get(cacheKey);
-    const lastEmbedded = cache[cacheKey] as number | undefined;
-    if (lastEmbedded && Date.now() - lastEmbedded < 12 * 3600 * 1000) return;
-
-    const [apiUrl, deviceId] = await Promise.all([getApiUrl(), getDeviceId()]);
-    await fetch(`${apiUrl}/api/ai/embed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-device-id': deviceId },
-      body: JSON.stringify({ url, title }),
-    });
-    await chrome.storage.local.set({ [cacheKey]: Date.now() });
-  } catch { /* silent fail if API down */ }
-}
 
 export default defineBackground(() => {
   // Initialize MRU list on install/startup
@@ -113,8 +96,6 @@ export default defineBackground(() => {
           domain: getDomainFromUrl(tab.url),
           title: tab.title || '',
         };
-        // Auto-embed for AI search (throttled)
-        maybeEmbedTab(tab.url, tab.title || '');
       }
     } catch { /* tab may not exist */ }
     broadcastUpdate();
@@ -563,6 +544,85 @@ export default defineBackground(() => {
       return true;
     }
 
+    if (message.type === 'split-view') {
+      const { tabId1, tabId2 } = message.payload;
+      (async () => {
+        try {
+          const currentWin = await chrome.windows.getCurrent();
+          const left = currentWin.left ?? 0;
+          const top = currentWin.top ?? 0;
+          const totalWidth = currentWin.width ?? 1920;
+          const height = currentWin.height ?? 1080;
+          const half = Math.floor(totalWidth / 2);
+          await chrome.windows.create({ tabId: tabId1, left, top, width: half, height, state: 'normal' });
+          await chrome.windows.create({ tabId: tabId2, left: left + half, top, width: half, height, state: 'normal' });
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
+    if (message.type === 'create-workspace') {
+      const { name } = message.payload;
+      (async () => {
+        try {
+          const chromeTabs = await chrome.tabs.query({});
+          // Fetch group info for all grouped tabs
+          const groupIds = [...new Set(chromeTabs.map((t) => t.groupId).filter((id) => id !== -1))];
+          const groupMap = new Map<number, { title: string; color: string }>();
+          for (const gid of groupIds) {
+            try {
+              const group = await chrome.tabGroups.get(gid);
+              groupMap.set(gid, { title: group.title ?? '', color: group.color });
+            } catch { /* group may not exist */ }
+          }
+          const tabData = chromeTabs
+            .filter((t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('about:'))
+            .map((t) => {
+              const group = t.groupId !== -1 ? groupMap.get(t.groupId) : undefined;
+              return {
+                title: t.title ?? '',
+                url: t.url ?? '',
+                faviconUrl: t.favIconUrl ?? '',
+                ...(group ? { groupTitle: group.title, groupColor: group.color } : {}),
+              };
+            });
+          await saveWorkspace(name, tabData);
+          broadcastSpecific({ type: 'workspace-updated' });
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
+    if (message.type === 'merge-windows') {
+      (async () => {
+        try {
+          const currentWin = await chrome.windows.getCurrent();
+          const allWins = await chrome.windows.getAll({ populate: true, windowTypes: ['normal'] });
+          for (const win of allWins) {
+            if (win.id === currentWin.id) continue;
+            const tabs = win.tabs ?? [];
+            for (const tab of tabs) {
+              if (tab.id != null) {
+                await chrome.tabs.move(tab.id, { windowId: currentWin.id!, index: -1 });
+              }
+            }
+          }
+          broadcastUpdate();
+          sendResponse({ success: true });
+        } catch {
+          sendResponse({ success: false });
+        }
+      })();
+      return true;
+    }
+
     if (message.type === 'focus-window') {
       const { windowId } = message.payload;
       chrome.windows.update(windowId, { focused: true }).then(() => sendResponse({ success: true }));
@@ -715,6 +775,73 @@ export default defineBackground(() => {
         }
         sendResponse({ success: !!prev });
       });
+      return true;
+    }
+
+    // AI tab agent — calls Groq API and returns structured actions
+    if (message.type === 'ai-agent') {
+      (async () => {
+        try {
+          const settings = await getSettings();
+          const apiKey = settings.groqApiKey;
+          if (!apiKey) {
+            sendResponse({ error: 'no-key' });
+            return;
+          }
+
+          const { query, tabs } = message.payload as { query: string; tabs: Array<{ tabId: number; title: string; url: string; groupTitle?: string }> };
+
+          // Build a tab list string for the prompt
+          const tabListString = tabs.map((t) => {
+            const domain = (() => { try { return new URL(t.url).hostname.replace('www.', ''); } catch { return t.url; } })();
+            const group = t.groupTitle ? ` [group: ${t.groupTitle}]` : '';
+            return `[${t.tabId}] "${t.title}" (${domain})${group}`;
+          }).join('\n');
+
+          const systemPrompt = `You are a browser tab manager AI. The user has these open browser tabs:\n${tabListString}\n\nRespond ONLY with a JSON object with this exact structure: {"message": "short friendly confirmation max 15 words", "actions": [...]}\n\nAvailable action types:\n- {"type":"group-tabs","tabIds":[number],"title":"string","color":"blue|cyan|green|yellow|orange|red|pink|purple|grey"}\n- {"type":"close-tab","tabId":number}\n- {"type":"close-tabs","tabIds":[number]}\n- {"type":"open-url","url":"string"}\n- {"type":"pin-tab","tabId":number,"pinned":boolean}\n- {"type":"switch-tab","tabId":number}\n- {"type":"move-to-new-window","tabId":number}\n- {"type":"reload-tab","tabId":number}\n- {"type":"ungroup-tabs","tabIds":[number]}\n- {"type":"split-view","tabId1":number,"tabId2":number}\n- {"type":"merge-windows"}\n- {"type":"create-workspace","name":"string"} // saves all current tabs as a named workspace session\n\nIMPORTANT: use create-workspace (NOT group-tabs) when the user asks to create/save a workspace. Use exact tabIds from the list. Add https:// to URLs if missing. Return empty actions array if nothing to do.`;
+
+          const requestBody = {
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: query },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+            max_tokens: 1024,
+          };
+
+          const res = await fetch(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify(requestBody),
+            }
+          );
+
+          if (!res.ok) {
+            const errText = await res.text().catch(() => String(res.status));
+            sendResponse({ error: errText });
+            return;
+          }
+
+          const data = await res.json();
+          const text = data?.choices?.[0]?.message?.content;
+          if (!text) {
+            sendResponse({ error: 'empty-response' });
+            return;
+          }
+
+          const parsed = JSON.parse(text);
+          sendResponse({ success: true, message: parsed.message, actions: parsed.actions ?? [] });
+        } catch (err) {
+          sendResponse({ error: String(err) });
+        }
+      })();
       return true;
     }
   });

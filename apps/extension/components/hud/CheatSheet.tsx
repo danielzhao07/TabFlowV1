@@ -30,7 +30,7 @@ const SHORTCUTS = [
     { keys: 'Ctrl+F', desc: 'Toggle window filter (all / current)' },
     { keys: 'Ctrl+S', desc: 'Cycle sort mode' },
     { keys: '> ...', desc: 'Open command palette' },
-    { keys: 'ai: ...', desc: 'AI semantic search' },
+    { keys: '@ ...', desc: 'AI tab agent' },
     { keys: 'is:pinned', desc: 'Filter pinned tabs' },
     { keys: 'domain:x', desc: 'Filter by domain' },
     { keys: 'Right-click', desc: 'Context menu (snooze, move, etc.)' },

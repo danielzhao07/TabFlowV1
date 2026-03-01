@@ -14,50 +14,23 @@ import { UndoToast } from './UndoToast';
 import { CommandPalette, useCommands } from './CommandPalette';
 import { GroupSuggestions } from './GroupSuggestions';
 import { SettingsPanel } from './SettingsPanel';
-import { searchHistory, checkHealth, type HistoryResult } from '@/lib/api-client';
+import { checkHealth } from '@/lib/api-client';
 import { getStoredTokens, type TokenSet } from '@/lib/auth';
+import { AiAgentPanel, AiThinkingBar } from './AiAgentPanel';
+import type { AgentResult, AgentAction } from '@/lib/agent';
 
 export function HudOverlay() {
   const s = useHudState();
   const a = useTabActions(s);
-  const [historyResults, setHistoryResults] = useState<HistoryResult[]>([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(false);
   const [authUser, setAuthUser] = useState<TokenSet | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-
-  // Detect ai: prefix in query
-  const isAiMode = s.query.startsWith('ai:');
-  const aiQuery = isAiMode ? s.query.slice(3).trim() : '';
-
-  // Debounced AI history search
-  useEffect(() => {
-    if (!isAiMode || !aiQuery) {
-      setHistoryResults([]);
-      setAiError(false);
-      return;
-    }
-    setAiLoading(true);
-    setAiError(false);
-    const timer = setTimeout(async () => {
-      try {
-        const results = await searchHistory(aiQuery, 15);
-        setHistoryResults(results);
-      } catch {
-        setHistoryResults([]);
-        setAiError(true);
-      } finally {
-        setAiLoading(false);
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [isAiMode, aiQuery]);
-
-  // Separate open tabs from history-only results
-  const openUrls = new Set(s.tabs.map((t) => t.url));
-  const historyOnly = historyResults.filter((r) => !openUrls.has(r.url));
+  const [aiMode, setAiMode] = useState(false);
+  const [aiPending, setAiPending] = useState(false);
+  const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [wsRefreshKey, setWsRefreshKey] = useState(0);
 
   // Compute cols: must match TabGrid's internal formula exactly for keyboard nav to be in sync
   const N = s.displayTabs.length;
@@ -129,6 +102,9 @@ export function HudOverlay() {
       if (message.type === 'tabs-updated' && s.visible) {
         s.fetchTabs();
       }
+      if (message.type === 'workspace-updated' && s.visible) {
+        setWsRefreshKey((k) => k + 1);
+      }
     };
 
     chrome.runtime.onMessage.addListener(listener);
@@ -147,6 +123,88 @@ export function HudOverlay() {
     openSettings: () => { chrome.runtime.openOptionsPage(); s.hide(); },
     openCheatSheet: () => s.setShowCheatSheet(true),
   });
+
+  const executeAction = useCallback(async (action: AgentAction) => {
+    switch (action.type) {
+      case 'group-tabs':
+        await chrome.runtime.sendMessage({ type: 'group-tabs', payload: { tabIds: action.tabIds, title: action.title, color: action.color || 'blue' } });
+        break;
+      case 'close-tab':
+        a.closeTab(action.tabId);
+        break;
+      case 'close-tabs':
+        for (const tabId of action.tabIds) {
+          a.closeTab(tabId);
+        }
+        s.setUndoToast({ message: `Closed ${action.tabIds.length} tabs` });
+        break;
+      case 'open-url':
+        await chrome.runtime.sendMessage({ type: 'open-url', payload: { url: action.url } });
+        break;
+      case 'pin-tab':
+        await chrome.runtime.sendMessage({ type: 'pin-tab', payload: { tabId: action.tabId, pinned: action.pinned } });
+        break;
+      case 'switch-tab':
+        await chrome.runtime.sendMessage({ type: 'switch-tab', payload: { tabId: action.tabId } });
+        break;
+      case 'move-to-new-window':
+        await chrome.runtime.sendMessage({ type: 'move-to-window', payload: { tabId: action.tabId, windowId: -1 } });
+        break;
+      case 'reload-tab':
+        await chrome.runtime.sendMessage({ type: 'reload-tab', payload: { tabId: action.tabId } });
+        break;
+      case 'ungroup-tabs':
+        await chrome.runtime.sendMessage({ type: 'ungroup-tabs', payload: { tabIds: action.tabIds } });
+        break;
+      case 'split-view':
+        await chrome.runtime.sendMessage({ type: 'split-view', payload: { tabId1: action.tabId1, tabId2: action.tabId2 } });
+        break;
+      case 'merge-windows':
+        await chrome.runtime.sendMessage({ type: 'merge-windows' });
+        break;
+      case 'create-workspace':
+        await chrome.runtime.sendMessage({ type: 'create-workspace', payload: { name: action.name } });
+        break;
+    }
+  }, [a, s]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAiSubmit = useCallback(async (query: string) => {
+    setAiPending(true);
+    setAgentResult(null);
+    setCompletedCount(0);
+    s.setQuery('');
+    try {
+      const res = await chrome.runtime.sendMessage({
+        type: 'ai-agent',
+        payload: { query, tabs: s.tabs },
+      });
+      if (res?.error === 'no-key') {
+        setAgentResult({ message: 'Add your Groq API key in settings to use the AI agent.', actions: [] });
+        setAiPending(false);
+        return;
+      }
+      if (res?.error) {
+        setAgentResult({ message: `Error: ${res.error}`, actions: [] });
+        setAiPending(false);
+        return;
+      }
+      const result: AgentResult = { message: res.message, actions: res.actions ?? [] };
+      setAgentResult(result);
+      setAiPending(false);
+      for (let i = 0; i < result.actions.length; i++) {
+        await executeAction(result.actions[i]);
+        setCompletedCount(i + 1);
+      }
+      await s.fetchTabs();
+      setTimeout(() => {
+        setAgentResult(null);
+        setAiMode(false);
+      }, 2500);
+    } catch {
+      setAgentResult({ message: 'Something went wrong. Please try again.', actions: [] });
+      setAiPending(false);
+    }
+  }, [s, executeAction]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSettingChange = useCallback(async (patch: Partial<TabFlowSettings>) => {
     const updated = await saveSettings(patch);
@@ -268,35 +326,6 @@ export function HudOverlay() {
           )}
         </div>
 
-        {/* AI history results (closed tabs from Neon) */}
-        {isAiMode && aiQuery && (
-          <div
-            className="px-6 py-2 shrink-0 mx-6 mb-1 rounded-xl"
-            style={{ background: 'rgba(18,18,30,0.75)', border: '1px solid rgba(255,255,255,0.06)' }}
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] text-white/30 uppercase tracking-wider">
-                {aiLoading ? 'Searching history…' : aiError ? 'API offline — start the API server to enable semantic search' : historyOnly.length > 0 ? `History (${historyOnly.length})` : 'No history found — browse more to build your search index'}
-              </span>
-            </div>
-            {!aiLoading && !aiError && historyOnly.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {historyOnly.slice(0, 6).map((r) => (
-                  <button
-                    key={r.url}
-                    onClick={() => chrome.tabs.create({ url: r.url })}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-colors text-left"
-                    title={r.url}
-                  >
-                    <span className="text-[11px] text-white/50 truncate max-w-[180px]">{r.title}</span>
-                    <span className="text-[9px] text-white/20 shrink-0">reopen</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Bottom section: workspaces + search — pinned to bottom */}
         <div className="shrink-0">
           <GroupSuggestions
@@ -313,7 +342,17 @@ export function HudOverlay() {
               return next;
             })}
           />
-          <WorkspaceSection tabs={s.displayTabs} onRestore={s.hide} />
+          <WorkspaceSection key={wsRefreshKey} tabs={s.displayTabs} onRestore={s.hide} />
+
+          {agentResult && (
+            <AiAgentPanel
+              message={agentResult.message}
+              actions={agentResult.actions}
+              completedCount={completedCount}
+              onDismiss={() => { setAgentResult(null); setAiMode(false); }}
+            />
+          )}
+          {aiPending && <AiThinkingBar />}
 
           <WindowStrip
             windows={s.otherWindows}
@@ -323,7 +362,9 @@ export function HudOverlay() {
           <BottomBar
             query={s.query}
             onQueryChange={s.setQuery}
-            isAiMode={isAiMode}
+            isAiMode={aiMode}
+            onAiClick={() => setAiMode((p) => !p)}
+            onAiSubmit={handleAiSubmit}
           />
         </div>
       </div>
@@ -334,6 +375,7 @@ export function HudOverlay() {
 
       {s.undoToast && (
         <UndoToast
+          key={s.undoToast.message}
           message={s.undoToast.message}
           onUndo={() => { a.reopenLastClosed(); s.setUndoToast(null); }}
           onDismiss={() => s.setUndoToast(null)}

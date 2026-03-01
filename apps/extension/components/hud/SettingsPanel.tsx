@@ -166,6 +166,39 @@ export function SettingsPanel({
             )}
           </div>
 
+          {/* AI Agent */}
+          <div className="py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2 mt-1">AI Agent</div>
+            {settings !== null && (
+              <div className="flex flex-col gap-1">
+                <input
+                  type="password"
+                  value={settings.groqApiKey ?? ''}
+                  onChange={(e) => onSettingChange({ groqApiKey: e.target.value })}
+                  placeholder="Groq API key…"
+                  className="w-full rounded-lg px-2.5 py-1.5 text-[12px] text-white/70 placeholder-white/25 outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                  }}
+                />
+                <span className="text-[10px] text-white/25">
+                  Free key at{' '}
+                  <a
+                    href="https://console.groq.com/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white/40 hover:text-white/60 underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    console.groq.com/keys
+                  </a>
+                  {' '}· Use @ in search to activate
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Footer */}
           <div className="py-3">
             <button

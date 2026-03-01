@@ -42,28 +42,6 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
-// ---- AI: embed a tab ----
-export async function embedTab(url: string, title: string): Promise<void> {
-  await request('/api/ai/embed', {
-    method: 'POST',
-    body: JSON.stringify({ url, title }),
-  });
-}
-
-// ---- AI: semantic history search ----
-export interface HistoryResult {
-  url: string;
-  title: string;
-  lastSeen: string;
-  similarity: number;
-}
-
-export async function searchHistory(query: string, limit = 10): Promise<HistoryResult[]> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
-  const data = await request<{ results: HistoryResult[] }>(`/api/ai/history?${params}`);
-  return data.results;
-}
-
 // ---- Analytics: record a tab visit ----
 export async function recordVisit(url: string, domain: string, durationMs: number, title?: string): Promise<void> {
   await request('/api/analytics/visit', {

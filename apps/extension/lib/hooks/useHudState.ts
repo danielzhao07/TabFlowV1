@@ -197,9 +197,8 @@ export function useHudState(): HudState {
 
   const isCommandMode = query.startsWith('>');
   const commandQuery = isCommandMode ? query.slice(1).trim() : '';
-  const isAiMode = query.startsWith('ai:');
 
-  const filteredTabs = !query || isCommandMode || isAiMode
+  const filteredTabs = !query || isCommandMode
     ? sortedTabs
     : searchTabs(sortedTabs, query, settings?.searchThreshold, notesMap.size > 0 ? notesMap : undefined, duplicateUrls);
 

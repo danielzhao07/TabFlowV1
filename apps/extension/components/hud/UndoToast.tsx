@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface UndoToastProps {
   message: string;
@@ -10,6 +10,8 @@ interface UndoToastProps {
 export function UndoToast({ message, onUndo, onDismiss, duration = 5000 }: UndoToastProps) {
   const [progress, setProgress] = useState(100);
   const [visible, setVisible] = useState(false);
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -24,12 +26,12 @@ export function UndoToast({ message, onUndo, onDismiss, duration = 5000 }: UndoT
       if (remaining <= 0) {
         clearInterval(interval);
         setVisible(false);
-        setTimeout(onDismiss, 150);
+        setTimeout(() => onDismissRef.current(), 150);
       }
     }, 50);
 
     return () => clearInterval(interval);
-  }, [duration, onDismiss]);
+  }, [duration]); // onDismiss intentionally excluded — using ref to avoid timer restarts
 
   return (
     <div

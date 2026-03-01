@@ -45,6 +45,39 @@
   }
 }
 
+/* Spin animation for AI thinking indicator */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* AI button clockwise rotating border glow */
+@keyframes rotateBorder {
+  from { --border-angle: 0deg; }
+  to   { --border-angle: 360deg; }
+}
+
+.ai-glow-btn {
+  position: relative;
+  border-radius: 8px;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--border-angle, 0deg),
+    rgba(160, 140, 255, 0.0) 0%,
+    rgba(160, 140, 255, 0.9) 20%,
+    rgba(200, 180, 255, 1.0) 40%,
+    rgba(160, 140, 255, 0.9) 60%,
+    rgba(160, 140, 255, 0.0) 80%
+  );
+  animation: rotateBorder 2s linear infinite;
+}
+
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
 /* Context menu individual item stagger */
 @keyframes menuItemIn {
   from {
