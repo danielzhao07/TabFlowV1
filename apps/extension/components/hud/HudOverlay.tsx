@@ -169,11 +169,10 @@ export function HudOverlay() {
       case 'bookmark-tab': {
         const tab = s.tabs.find((t) => t.tabId === action.tabId);
         if (tab) {
-          if (action.folder) {
-            await chrome.runtime.sendMessage({ type: 'bookmark-tab', payload: { url: tab.url, title: tab.title, folder: action.folder } });
-          } else {
-            await a.toggleBookmark(action.tabId);
-          }
+          await chrome.runtime.sendMessage({ type: 'bookmark-tab', payload: { url: tab.url, title: tab.title, folder: action.folder } });
+          // Refresh bookmarked URLs so the star badge updates immediately
+          const bRes = await chrome.runtime.sendMessage({ type: 'get-bookmarks' }).catch(() => null);
+          if (bRes?.bookmarks) s.setBookmarkedUrls(new Set(bRes.bookmarks.map((b: { url: string }) => b.url)));
         }
         break;
       }
