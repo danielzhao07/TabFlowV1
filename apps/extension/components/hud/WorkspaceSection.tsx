@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { getWorkspaces, saveWorkspace, updateWorkspace, deleteWorkspace, type Workspace } from '@/lib/workspaces';
 import type { TabInfo } from '@/lib/types';
+import type { TokenSet } from '@/lib/auth';
 
 interface WorkspaceSectionProps {
   tabs: TabInfo[];
   onRestore?: () => void;
+  authUser: TokenSet | null;
+  onRequestSignIn?: () => void;
 }
 
-export function WorkspaceSection({ tabs, onRestore }: WorkspaceSectionProps) {
+export function WorkspaceSection({ tabs, onRestore, authUser, onRequestSignIn }: WorkspaceSectionProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [saving, setSaving] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -16,8 +19,9 @@ export function WorkspaceSection({ tabs, onRestore }: WorkspaceSectionProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!authUser) return;
     getWorkspaces().then(setWorkspaces).catch(() => {});
-  }, []);
+  }, [authUser]);
 
   useEffect(() => {
     if (showInput) inputRef.current?.focus();
@@ -61,6 +65,30 @@ export function WorkspaceSection({ tabs, onRestore }: WorkspaceSectionProps) {
     await deleteWorkspace(id).catch(() => {});
     setWorkspaces((prev) => prev.filter((w) => w.id !== id));
   };
+
+  if (!authUser) {
+    return (
+      <div
+        className="flex items-center gap-2 px-3 py-1.5 shrink-0"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: 'rgba(0,0,0,0.18)' }}
+      >
+        <span className="text-[9px] text-white/20 uppercase tracking-wider shrink-0 mr-1">Workspaces</span>
+        <button
+          onClick={onRequestSignIn}
+          className="flex items-center gap-1.5 transition-colors"
+          style={{ color: 'rgba(255,255,255,0.22)', outline: 'none' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.45)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.22)'; }}
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          <span className="text-[10px]">Sign in to save and restore workspaces</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -158,6 +186,7 @@ export function WorkspaceSection({ tabs, onRestore }: WorkspaceSectionProps) {
               if (e.key === 'Enter') handleSave();
               if (e.key === 'Escape') { setShowInput(false); setNameInput(''); }
             }}
+            data-no-hud-escape="true"
             placeholder="Name…"
             className="bg-white/[0.08] border border-white/[0.14] rounded-md px-2 text-[11px] text-white/80 placeholder-white/25 outline-none"
             style={{ height: 26, width: 90 }}

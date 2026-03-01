@@ -44,6 +44,7 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (isAiMode && e.key === 'Enter' && query.trim() && onAiSubmit) {
       e.preventDefault();
+      e.stopPropagation();
       historyIdxRef.current = -1;
       onAiSubmit(query.trim());
       return;
@@ -107,6 +108,7 @@ export function BottomBar({ query, onQueryChange, isAiMode, onAiClick, onAiSubmi
           placeholder={isAiMode ? 'Ask AI to manage your tabs…' : 'Search tabs...'}
           className="flex-1 bg-transparent text-[13px] placeholder-white/20 outline-none"
           style={{ color: isAiMode ? 'rgba(200,190,255,0.85)' : 'rgba(255,255,255,0.7)' }}
+          {...(!isAiMode ? { 'data-hud-search': 'true' } : {})}
         />
         {query && (
           <button

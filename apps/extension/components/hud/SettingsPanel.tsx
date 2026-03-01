@@ -27,15 +27,15 @@ function Toggle({
     <div className="flex items-center justify-between py-2 gap-3">
       <div className="flex-1 min-w-0">
         <div className="text-[13px] text-white/75">{label}</div>
-        {description && <div className="text-[11px] text-white/35 mt-0.5">{description}</div>}
+        {description && <div className="text-[11px] text-white/40 mt-0.5">{description}</div>}
       </div>
       <button
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className="w-8 h-4.5 rounded-full shrink-0 transition-colors duration-150 relative"
+        className="shrink-0 transition-colors duration-150 relative rounded-full"
         style={{
-          backgroundColor: checked ? 'rgba(99,179,237,0.8)' : 'rgba(255,255,255,0.12)',
+          backgroundColor: checked ? 'rgba(99,179,237,0.75)' : 'rgba(255,255,255,0.10)',
           width: 32,
           height: 18,
         }}
@@ -53,6 +53,25 @@ function Toggle({
     </div>
   );
 }
+
+function SectionHeader({ children }: { children: string }) {
+  return (
+    <div className="text-[10px] text-white/35 uppercase tracking-widest mb-1 mt-1">
+      {children}
+    </div>
+  );
+}
+
+const SUSPEND_MINUTES_OPTIONS = [
+  { label: '5m',  value: 5 },
+  { label: '15m', value: 15 },
+  { label: '30m', value: 30 },
+  { label: '1h',  value: 60 },
+  { label: '2h',  value: 120 },
+  { label: '4h',  value: 240 },
+];
+
+const DIVIDER = { borderBottom: '1px solid rgba(255,255,255,0.06)' };
 
 export function SettingsPanel({
   authUser,
@@ -78,24 +97,24 @@ export function SettingsPanel({
         className="fixed top-12 right-4 rounded-2xl overflow-hidden"
         style={{
           zIndex: 2147483646,
-          width: 280,
-          background: 'rgba(18, 18, 30, 0.92)',
+          width: 284,
+          background: 'rgba(16, 16, 28, 0.94)',
           border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 16px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
-          backdropFilter: 'blur(24px)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)',
+          backdropFilter: 'blur(28px)',
         }}
       >
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+          style={DIVIDER}
         >
-          <span className="text-[13px] font-semibold text-white/70 tracking-wide">Settings</span>
+          <span className="text-[12px] font-medium text-white/60 tracking-wider uppercase">Settings</span>
           <button
             onClick={onClose}
-            className="w-5 h-5 rounded flex items-center justify-center text-white/30 hover:text-white/60 transition-colors"
+            className="w-5 h-5 rounded flex items-center justify-center text-white/25 hover:text-white/55 transition-colors"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -103,29 +122,37 @@ export function SettingsPanel({
 
         <div className="px-4 py-1">
           {/* Account section */}
-          <div className="py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Account</div>
+          <div className="py-2.5" style={DIVIDER}>
+            <SectionHeader>Account</SectionHeader>
             {authUser ? (
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] text-white/50 truncate">{authUser.email}</span>
+              <div className="flex items-center justify-between gap-2 mt-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] font-semibold"
+                    style={{ background: 'rgba(99,179,237,0.18)', color: 'rgba(99,179,237,0.85)' }}
+                  >
+                    {authUser.email[0].toUpperCase()}
+                  </div>
+                  <span className="text-[12px] text-white/50 truncate">{authUser.email}</span>
+                </div>
                 <button
                   onClick={onSignOut}
-                  className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-white/40 hover:bg-white/[0.06] hover:text-white/60 transition-colors shrink-0"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border border-white/10 text-white/35 hover:bg-white/[0.06] hover:text-white/55 transition-colors shrink-0"
                 >
                   Sign out
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 mt-1.5">
                 {authError && (
-                  <span className="text-[10px] text-red-400/70 truncate" title={authError}>
+                  <span className="text-[10px] text-red-400/60 truncate" title={authError}>
                     {authError}
                   </span>
                 )}
                 <button
                   onClick={onSignIn}
                   disabled={authLoading}
-                  className="w-full text-[12px] py-1.5 rounded-lg border border-white/10 text-white/50 hover:bg-white/[0.06] hover:text-white/70 disabled:opacity-40 transition-colors"
+                  className="w-full text-[12px] py-1.5 rounded-lg border border-white/10 text-white/45 hover:bg-white/[0.06] hover:text-white/65 disabled:opacity-40 transition-colors"
                 >
                   {authLoading ? 'Signing in…' : 'Sign in'}
                 </button>
@@ -134,8 +161,8 @@ export function SettingsPanel({
           </div>
 
           {/* View section */}
-          <div className="py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-1 mt-1">View</div>
+          <div className="py-1" style={DIVIDER}>
+            <SectionHeader>View</SectionHeader>
             {settings && (
               <>
                 <Toggle
@@ -153,66 +180,120 @@ export function SettingsPanel({
             )}
           </div>
 
-          {/* Tab suspender */}
-          <div className="py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-1 mt-1">Performance</div>
+          {/* Performance section */}
+          <div className="py-1 pb-2" style={DIVIDER}>
+            <SectionHeader>Performance</SectionHeader>
             {settings && (
-              <Toggle
-                label="Auto-suspend inactive tabs"
-                description="Frees memory for tabs you haven't used"
-                checked={settings.autoSuspend}
-                onChange={(v) => onSettingChange({ autoSuspend: v })}
-              />
+              <>
+                <Toggle
+                  label="Auto-suspend inactive tabs"
+                  description="Frees memory for tabs you haven't used"
+                  checked={settings.autoSuspend}
+                  onChange={(v) => onSettingChange({ autoSuspend: v })}
+                />
+                {settings.autoSuspend && (() => {
+                  const idx = SUSPEND_MINUTES_OPTIONS.findIndex((o) => o.value === settings.autoSuspendMinutes);
+                  const pct = idx / (SUSPEND_MINUTES_OPTIONS.length - 1);
+                  // Single source of truth for thumb center — shared by label, fill, and dot
+                  const thumbLeft = `calc(${pct * 100}% + ${(0.5 - pct) * 10}px)`;
+                  const timeLabel = settings.autoSuspendMinutes < 60
+                    ? `${settings.autoSuspendMinutes}m`
+                    : `${settings.autoSuspendMinutes / 60}h`;
+                  return (
+                    <div className="pb-1">
+                      <span className="text-[11px] text-white/65 block mb-3">Suspend after</span>
+                      <div className="relative" style={{ paddingTop: 18 }}>
+                        {/* Floating time label anchored to thumb center */}
+                        <span
+                          className="absolute top-0 text-[11px] text-white/90 pointer-events-none leading-none font-medium"
+                          style={{ left: thumbLeft, transform: 'translateX(-50%)' }}
+                        >
+                          {timeLabel}
+                        </span>
+                        {/* Custom visual slider — all elements share thumbLeft */}
+                        <div className="relative" style={{ height: 10 }}>
+                          {/* Track background */}
+                          <div className="absolute inset-x-0 rounded-full pointer-events-none"
+                            style={{ top: '50%', height: 2, marginTop: -1, background: 'rgba(255,255,255,0.14)' }}
+                          />
+                          {/* Track fill */}
+                          <div className="absolute left-0 rounded-full pointer-events-none"
+                            style={{ top: '50%', height: 2, marginTop: -1, width: thumbLeft, background: 'rgba(255,255,255,0.50)' }}
+                          />
+                          {/* Thumb dot */}
+                          <div className="absolute rounded-full pointer-events-none"
+                            style={{ top: '50%', left: thumbLeft, width: 10, height: 10, marginTop: -5, marginLeft: -5, background: 'rgba(255,255,255,0.88)' }}
+                          />
+                          {/* Invisible input on top for drag interaction */}
+                          <input
+                            type="range"
+                            min={0}
+                            max={SUSPEND_MINUTES_OPTIONS.length - 1}
+                            step={1}
+                            value={idx}
+                            onChange={(e) => {
+                              const opt = SUSPEND_MINUTES_OPTIONS[Number(e.target.value)];
+                              if (opt) onSettingChange({ autoSuspendMinutes: opt.value });
+                            }}
+                            className="slider-minimal absolute inset-0 w-full"
+                            style={{ height: 10, opacity: 0 }}
+                          />
+                        </div>
+                      </div>
+                      <div className="relative mt-1.5" style={{ height: 12 }}>
+                        {SUSPEND_MINUTES_OPTIONS.map((o, i) => {
+                          const p = i / (SUSPEND_MINUTES_OPTIONS.length - 1);
+                          const left = `calc(${p * 100}% + ${(0.5 - p) * 10}px)`;
+                          return (
+                            <span
+                              key={o.value}
+                              className="absolute text-[9px]"
+                              style={{ left, transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.55)' }}
+                            >
+                              {o.label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
             )}
           </div>
 
-          {/* AI Agent */}
-          <div className="py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2 mt-1">AI Agent</div>
+          {/* AI Agent section */}
+          <div className="py-2.5">
+            <SectionHeader>AI Agent</SectionHeader>
             {settings !== null && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 mt-1.5">
                 <input
                   type="password"
                   value={settings.groqApiKey ?? ''}
                   onChange={(e) => onSettingChange({ groqApiKey: e.target.value })}
                   placeholder="Groq API key…"
-                  className="w-full rounded-lg px-2.5 py-1.5 text-[12px] text-white/70 placeholder-white/25 outline-none"
+                  className="w-full rounded-lg px-2.5 py-1.5 text-[12px] text-white/65 placeholder-white/22 outline-none"
                   style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.10)',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.09)',
                   }}
                 />
-                <span className="text-[10px] text-white/25">
-                  Free key at{' '}
+                <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  Free at{' '}
                   <a
                     href="https://console.groq.com/keys"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-white/40 hover:text-white/60 underline"
+                    className="underline hover:opacity-80"
+                    style={{ color: 'rgba(255,255,255,0.70)' }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     console.groq.com/keys
                   </a>
-                  {' '}· Use @ in search to activate
+                  {' '}· Type @ in search to use
                 </span>
               </div>
             )}
-          </div>
-
-          {/* Footer */}
-          <div className="py-3">
-            <button
-              onClick={() => {
-                chrome.runtime.openOptionsPage();
-                onClose();
-              }}
-              className="w-full flex items-center justify-between text-[12px] text-white/35 hover:text-white/60 transition-colors"
-            >
-              <span>Full settings</span>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>

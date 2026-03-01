@@ -27,6 +27,7 @@ export function HudOverlay() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [aiMode, setAiMode] = useState(false);
+  const [aiQuery, setAiQuery] = useState('');
   const [aiPending, setAiPending] = useState(false);
   const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
@@ -229,7 +230,7 @@ export function HudOverlay() {
     setAiPending(true);
     setAgentResult(null);
     setCompletedCount(0);
-    s.setQuery('');
+    setAiQuery('');
     try {
       const res = await chrome.runtime.sendMessage({
         type: 'ai-agent',
@@ -408,7 +409,7 @@ export function HudOverlay() {
               return next;
             })}
           />
-          <WorkspaceSection key={wsRefreshKey} tabs={s.displayTabs} onRestore={s.hide} />
+          <WorkspaceSection key={wsRefreshKey} tabs={s.displayTabs} onRestore={s.hide} authUser={authUser} onRequestSignIn={() => setShowSettings(true)} />
 
           {agentResult && (
             <AiAgentPanel
@@ -426,10 +427,10 @@ export function HudOverlay() {
           />
 
           <BottomBar
-            query={s.query}
-            onQueryChange={s.setQuery}
+            query={aiMode ? aiQuery : s.query}
+            onQueryChange={aiMode ? setAiQuery : s.setQuery}
             isAiMode={aiMode}
-            onAiClick={() => setAiMode((p) => !p)}
+            onAiClick={() => { setAiMode((p) => !p); setAiQuery(''); }}
             onAiSubmit={handleAiSubmit}
             promptHistory={promptHistoryRef.current}
           />

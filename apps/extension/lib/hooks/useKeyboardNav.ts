@@ -11,7 +11,12 @@ export function useKeyboardNav(
     if (!s.visible) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isTyping = (e.target as HTMLElement)?.tagName === 'INPUT';
+      // e.target is retargeted to the shadow host when events originate from inside
+      // the shadow DOM — use composedPath()[0] to get the actual focused element.
+      const target = (e.composedPath()[0] as HTMLElement) ?? (e.target as HTMLElement);
+      const isInput = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+      // Legacy alias used below for non-ctrl shortcuts
+      const isTyping = isInput;
 
       // --- Ctrl combos ---
       if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -70,10 +75,14 @@ export function useKeyboardNav(
           else s.setSelectedIndex((i) => Math.min(i + 1, len - 1));
           break;
         case 'Enter':
+          // Skip if focused in an input that is not the main HUD search bar
+          if (isInput && !target.hasAttribute('data-hud-search')) break;
           e.preventDefault();
           if (s.displayTabs[s.selectedIndex]) a.switchToTab(s.displayTabs[s.selectedIndex].tabId);
           break;
         case 'Escape':
+          // Skip if the focused input has opted out of Escape-to-close
+          if (target.hasAttribute('data-no-hud-escape')) break;
           e.preventDefault();
           s.hide();
           break;

@@ -84,6 +84,35 @@
   transition: transform 80ms ease-out;
 }
 
+/* Minimal range slider — transparent overlay, visuals are custom divs */
+input[type='range'].slider-minimal {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+}
+input[type='range'].slider-minimal::-webkit-slider-runnable-track {
+  background: transparent;
+}
+input[type='range'].slider-minimal::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+}
+input[type='range'].slider-minimal::-moz-range-track {
+  background: transparent;
+}
+input[type='range'].slider-minimal::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border: none;
+}
+
 /* Context menu individual item stagger */
 @keyframes menuItemIn {
   from {

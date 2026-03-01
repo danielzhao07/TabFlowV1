@@ -37,6 +37,7 @@ export function AnalyticsBar({ tabs = [], onSwitch }: AnalyticsBarProps) {
       const counts = new Map<string, number>();
       for (const [url, entry] of map) {
         try {
+          if (url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:')) continue;
           const d = new URL(url).hostname.replace('www.', '');
           if (d) counts.set(d, (counts.get(d) ?? 0) + entry.visitCount);
         } catch { /* ignore */ }

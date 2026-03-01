@@ -13,7 +13,7 @@ export async function getFrecencyMap(): Promise<Map<string, FrecencyEntry>> {
 }
 
 export async function recordVisit(url: string): Promise<void> {
-  if (!url || url === 'chrome://newtab/') return;
+  if (!url || url.startsWith('chrome://') || url.startsWith('edge://') || url.startsWith('about:')) return;
   const map = await getFrecencyMap();
   const existing = map.get(url);
   if (existing) {
